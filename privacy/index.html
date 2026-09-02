@@ -40,6 +40,7 @@
           <li>Hesap ve oturum bilgileri: Sign in with Apple ve Supabase tabanlı oturum durumları.</li>
           <li>Abonelik ve satın alma bilgileri: StoreKit işlem kanıtları, Premium yetki durumu ve abonelik yaşam döngüsü.</li>
           <li>Kullanım hakkı bilgileri: plan türü, aylık limit, kullanılan ve kalan kontrol hakkı.</li>
+          <li>Teknik bağlantı ve ağ bilgileri: IP adresi, istek ve ağ metadata'sı gibi altyapı kayıtları. Bu bilgiler hizmet altyapısı tarafından yaklaşık ülke/bölge düzeyinde konum veya ağ bilgisi çıkarılmasına ya da kaydedilmesine imkan verebilir.</li>
           <li>Kontrol girdileri: kullanıcı tarafından girilen URL, alan adı, telefon numarası, IBAN veya hesap benzeri bilgi, e-posta adresi veya mesaj metni.</li>
           <li>Yerel uygulama verileri: maskelenmiş geçmiş özetleri, tercih ve onboarding durumu gibi cihazda tutulan bilgiler.</li>
           <li>Tanılama bilgileri: geliştirme/test sürümlerinde sınırlı ve güvenli trace bilgileri; üretim davranışı olarak üçüncü taraf reklam veya takip analitiği gözlenmemiştir.</li>
@@ -73,6 +74,15 @@
           <li>T.C. Siber Güvenlik Başkanlığı: desteklenen URL/domain kontrollerinde resmi tehdit kaydı sorgusu için.</li>
           <li>Domain/URL açık kaynak sağlayıcıları: yalnız sunucu tarafındaki uygunluk, yakın tarihli güvenli özet, kullanım hakkı ve sağlayıcı ayarları izin verdiğinde.</li>
         </ul>
+        <p>
+          Supabase ve ilgili altyapı/hizmet sağlayıcıları; kimlik doğrulama,
+          hizmetin çalışması, güvenlik, kötüye kullanım veya dolandırıcılık
+          önleme, altyapı güvenilirliği, sorun giderme ve operasyonel bütünlük
+          amaçlarıyla IP adresi, istek ve ağ metadata'sı gibi teknik bağlantı
+          bilgilerini işleyebilir veya tutabilir. Bu tür ağ bilgileri yaklaşık
+          ülke/bölge düzeyinde konum göstergesi sağlayabilir. Güvende bu
+          davranış için hassas GPS konumu veya Core Location izni istemez.
+        </p>
         <p>Telefon açık web araştırması ve Tavily mevcut sürümde kapalıdır.</p>
       </div>
 
@@ -132,8 +142,9 @@
           Mevcut kaynak incelemesinde AppTrackingTransparency, IDFA erişimi,
           reklam SDK'sı veya üçüncü taraf takip analitiği bulunmamıştır.
           Güvende HTTPS/TLS bağlantılarını, platform güvenlik mekanizmalarını
-          ve güvenli oturum depolamayı kullanır. Hiçbir sistem mutlak güvenlik
-          garantisi veremez.
+          ve güvenli oturum depolamayı kullanır. Teknik bağlantı/ağ bilgileri
+          reklam, çapraz uygulama/site takibi veya hassas konum takibi için
+          kullanılmaz. Hiçbir sistem mutlak güvenlik garantisi veremez.
         </p>
       </div>
 
