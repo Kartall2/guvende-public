@@ -34,6 +34,20 @@
 .admin .tag.off { background: #eef0f2; color: var(--muted); }
 .admin #qr { width: 200px; height: 200px; display: block; margin: 8px 0; }
 .admin .preview { border: 1px dashed var(--brand); border-radius: 16px; padding: 14px; margin: 12px 0; background: var(--soft); }
+.admin fieldset.steps { border: 0; padding: 0; margin: 12px 0; }
+.admin fieldset.steps legend { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+.admin fieldset.steps input { margin-top: 6px; }
+.admin .phone { max-width: 360px; margin: 12px auto; background: #f4f6f3; border-radius: 26px; padding: 14px; border: 1px solid var(--line); }
+.admin .band { color: #fff; border-radius: 12px; padding: 8px 12px; font-weight: 700; font-size: 14px; }
+.admin .band.info { background: #2f6fbf; }
+.admin .band.attention { background: #d9822b; }
+.admin .band.high { background: #c8372d; }
+.admin .phone h3 { margin: 12px 0 2px; font-size: 21px; }
+.admin .phone .meta { color: var(--muted); font-size: 12px; }
+.admin .phone .box { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-top: 10px; }
+.admin .phone .box h4 { margin: 0 0 6px; font-size: 15px; }
+.admin .phone ol { margin: 0; padding-left: 20px; }
+.admin .phone .share { margin-top: 12px; background: var(--brand); color: #fff; text-align: center; border-radius: 14px; padding: 12px; font-weight: 700; }
 .admin .modal { position: fixed; inset: 0; background: rgba(20, 32, 51, .45); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .admin .modal[hidden] { display: none; }
 .admin .modal-card { background: #fff; border-radius: 20px; padding: 20px; max-width: 420px; width: 100%; }

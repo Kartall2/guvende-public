@@ -3,7 +3,9 @@
 // user on the admin list. Text from the server is always set as textContent.
 (function () {
   "use strict";
-  var envName = new URLSearchParams(location.search).get("env") === "sandbox" ? "sandbox" : "production";
+  // ?env=sandbox works only where a local config defines the test project.
+  var envName = new URLSearchParams(location.search).get("env") === "sandbox" && window.GVD_ADMIN_CONFIG.sandbox
+    ? "sandbox" : "production";
   var env = window.GVD_ADMIN_CONFIG[envName];
   var client = window.supabase.createClient(env.url, env.publishableKey, {
     auth: { flowType: "implicit", detectSessionInUrl: true, persistSession: true, storageKey: "gvd-admin-" + envName }
@@ -177,19 +179,40 @@
 
   function draft() {
     var expires = $("a-expires").value;
+    var steps = Array.prototype.map.call(document.querySelectorAll(".a-step"), function (i) { return i.value.trim(); })
+      .filter(function (s) { return s.length > 0; });
     return {
       title: $("a-title").value.trim(), body: $("a-body").value.trim(), severity: $("a-severity").value,
-      expiresAt: expires ? new Date(expires + "T23:59:00").toISOString() : null, push: $("a-push").checked
+      expiresAt: expires ? new Date(expires + "T23:59:00").toISOString() : null, push: $("a-push").checked,
+      protection: steps, sourceName: $("a-source-name").value.trim(), sourceURL: $("a-source-url").value.trim()
     };
+  }
+
+  // The preview follows the app's alert detail: band, title, date, sections.
+  function phonePreview(d) {
+    var phone = el("div", "phone");
+    phone.append(el("div", "band " + d.severity, labels.severity[d.severity]), el("h3", null, d.title),
+      el("div", "meta", when(new Date().toISOString())));
+    var what = el("div", "box"); what.append(el("h4", null, "Ne oluyor?"), el("p", null, d.body)); phone.append(what);
+    if (d.protection.length) {
+      var how = el("div", "box"), list = el("ol");
+      how.append(el("h4", null, "Nasıl korunursun?"));
+      d.protection.forEach(function (s) { list.append(el("li", null, s)); });
+      how.append(list); phone.append(how);
+    }
+    if (d.sourceName) phone.append(el("p", "meta", "Kaynak: " + d.sourceName + (d.sourceURL ? " (" + d.sourceURL + ")" : "")));
+    phone.append(el("div", "share", "Ailene gönder"));
+    return phone;
   }
 
   $("preview").onclick = function () {
     var d = draft(), box = $("preview-box"); box.replaceChildren();
     if (d.title.length < 3 || d.body.length < 10) { $("publish-note").textContent = "Başlık en az 3, metin en az 10 karakter olmalı."; box.hidden = true; return; }
+    if (d.protection.length === 1) { $("publish-note").textContent = "Korunma maddeleri için en az 2 madde gir ya da hepsini boş bırak."; box.hidden = true; return; }
+    if (d.sourceURL && (!/^https:\/\/\S+$/.test(d.sourceURL) || !d.sourceName)) { $("publish-note").textContent = "Kaynak bağlantısı https:// ile başlamalı ve kaynak adı girilmeli."; box.hidden = true; return; }
     $("publish-note").textContent = "";
-    var card = el("div", "preview"), head = el("div", "row");
-    head.append(el("strong", null, d.title), el("span", "tag " + d.severity, labels.severity[d.severity]));
-    card.append(head, el("p", null, d.body), el("div", "meta",
+    var card = el("div", "preview");
+    card.append(phonePreview(d), el("div", "meta",
       (d.expiresAt ? "Bitiş: " + when(d.expiresAt) : "Bitiş tarihi yok") + (d.push ? " · Push bildirimi gönderilecek" : " · Push gönderilmeyecek")));
     var publish = el("button", "primary", "Yayınla");
     publish.onclick = async function () {
@@ -201,7 +224,8 @@
         var push = result.push;
         $("publish-note").textContent = "Yayınlandı." + (push ? (push.status === "notConfigured" ? " Push gönderilemedi: APNs anahtarı yok."
           : " Push: " + push.sent + " başarılı, " + push.failed + " başarısız.") : "");
-        ["a-title", "a-body", "a-expires"].forEach(function (id) { $(id).value = ""; });
+        ["a-title", "a-body", "a-expires", "a-source-name", "a-source-url"].forEach(function (id) { $(id).value = ""; });
+        document.querySelectorAll(".a-step").forEach(function (i) { i.value = ""; });
         $("a-push").checked = false; box.hidden = true;
         loadAll();
       } catch (e) { $("publish-note").textContent = "Yayınlanamadı."; publish.disabled = false; }

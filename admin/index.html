@@ -54,7 +54,16 @@
         <div class="card">
           <h2>Uyarı yayınla</h2>
           <label>Başlık<input id="a-title" maxlength="80"></label>
-          <label>Metin<textarea id="a-body" maxlength="2000" rows="5"></textarea></label>
+          <label>Ne oluyor? (metin)<textarea id="a-body" maxlength="2000" rows="5"></textarea></label>
+          <fieldset class="steps">
+            <legend>Nasıl korunursun? (isteğe bağlı, 2–4 madde)</legend>
+            <input class="a-step" maxlength="200" placeholder="1. madde">
+            <input class="a-step" maxlength="200" placeholder="2. madde">
+            <input class="a-step" maxlength="200" placeholder="3. madde">
+            <input class="a-step" maxlength="200" placeholder="4. madde">
+          </fieldset>
+          <label>Kaynak adı (isteğe bağlı)<input id="a-source-name" maxlength="120" placeholder="ör. Siber Güvenlik Başkanlığı"></label>
+          <label>Kaynak bağlantısı (isteğe bağlı, https://)<input id="a-source-url" type="url" maxlength="500" placeholder="https://"></label>
           <label>Önem
             <select id="a-severity">
               <option value="info">Bilgi</option>
