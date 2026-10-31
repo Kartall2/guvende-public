@@ -55,6 +55,7 @@
           <li><strong>Arama geçmişi (araştırma girdileri):</strong> araştırmasını başlattığın telefon numarası, bağlantı veya alan adı. Bunlar sorguladığın numara ve adreslerdir; kendi telefon numaran değildir.</li>
           <li><strong>Topluluk bildirimleri:</strong> "Bilgi ekle" ile gönderdiğin tür (numara, link, SMS içeriği, IBAN veya e-posta), değer, kategori, en fazla 500 karakterlik açıklama ve olay tarihi. Görsel veya dosya eki alınmaz.</li>
           <li><strong>Teknik bilgiler:</strong> IP adresi ve istek bilgileri gibi altyapı kayıtları.</li>
+          <li><strong>Bildirim token'ı:</strong> bildirimlere izin verirsen Apple'ın cihazına verdiği bildirim adresi, test veya canlı ortam bilgisi ve son görülme zamanı. Hesabına bağlanmaz.</li>
           <li><strong>Cihazda kalan bilgiler:</strong> maskelenmiş kontrol geçmişi ve tercihler. IBAN, e-posta ve mesaj metinleri cihazında analiz edilir, sunucuya gönderilmez.</li>
         </ul>
       </div>
@@ -66,6 +67,7 @@
           <li>Hesabını, Premium aboneliğini ve aylık araştırma hakkını yönetmek.</li>
           <li>Güvenliği sağlamak, kötüye kullanımı ve dolandırıcılığı önlemek.</li>
           <li>Topluluk bildirimlerini incelemek ve onaylananları anonim sayı olarak göstermek.</li>
+          <li>İzin verdiysen önemli dolandırıcılık uyarılarını bildirim olarak göndermek.</li>
           <li>Hesap silme ve veri taleplerini yerine getirmek.</li>
         </ul>
         <p>Verilerini reklam, takip veya profilleme için kullanmıyoruz; veri satmıyoruz.</p>
@@ -87,6 +89,17 @@
           <li><strong>Bağlantı ve alan adları:</strong> T.C. Siber Güvenlik Başkanlığı'nın resmî tehdit kayıtlarıyla karşılaştırılabilir ve Brave Search API ile araştırılabilir. Sonuç özeti 24 saat önbellekte tutulur, süre dolduktan sonra en geç 1 saat içinde silinir.</li>
           <li>Araştırma hakkı kayıtlarında numaranın kendisi değil, geri çevrilemeyen bir özeti tutulur. Tamamlanan araştırmada resmî kaynak bulunup bulunmadığı ve uyarı çıkıp çıkmadığı yalnız evet/hayır işareti olarak kaydedilir; bu işaretler 30 gün sonra silinir.</li>
           <li>Sonuçlar arayanın kimliğini doğrulamaz. Güvende girdiğin bağlantıları tarayıcıda otomatik açmaz.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>Bildirimler (push)</h2>
+        <ul>
+          <li>Bildirim izni uygulamanın ilk açılışında istenmez; ilk kontrolünü tamamladıktan sonra bir kez sorulur. İzin vermezsen yeniden sorulmaz; izni istediğin zaman iPhone Ayarlar'ından açıp kapatabilirsin.</li>
+          <li>İzin verirsen yalnız Apple'ın cihazına verdiği bildirim token'ı, test veya canlı ortam bilgisi ve son görülme zamanı saklanır. Token hesabına, e-postana veya kontrol geçmişine bağlanmaz.</li>
+          <li>Token yalnız Güvende'nin yayınladığı güvenlik uyarılarını göndermek için, Apple Push Notification service (APNs) aracılığıyla kullanılır. Reklam veya pazarlama bildirimi gönderilmez.</li>
+          <li>Apple'ın geçersiz saydığı token'lar ilk gönderimde, 90 gün boyunca görülmeyen token'lar otomatik olarak silinir.</li>
+          <li>Kötüye kullanımı önlemek için uygulamanın hesap gerektirmeyen isteklerinde (ana sayfa özeti, uyarılar, bildirim kaydı) IP adresinin geri çevrilemeyen bir özeti en fazla 1 saat tutulur.</li>
         </ul>
       </div>
 
@@ -130,8 +143,8 @@
         <h3>Apple</h3>
         <ul>
           <li>Ülke: ABD ve İrlanda</li>
-          <li>Amaç: Sign in with Apple, App Store satın alma ve abonelik</li>
-          <li>Giden veri: Apple'ın kendi işlediği giriş ve ödeme bilgileri</li>
+          <li>Amaç: Sign in with Apple, App Store satın alma ve abonelik, bildirim gönderimi (APNs)</li>
+          <li>Giden veri: Apple'ın kendi işlediği giriş ve ödeme bilgileri; bildirim için token ve uyarı metni</li>
         </ul>
         <h3>T.C. Siber Güvenlik Başkanlığı kayıtları</h3>
         <ul>
@@ -160,6 +173,7 @@
         <ul>
           <li>Hesap ve abonelik kayıtları hesabın açık olduğu sürece tutulur.</li>
           <li>Araştırma önbelleği yukarıdaki sürelerde silinir.</li>
+          <li>Bildirim token'ı 90 gün görülmezse ya da Apple geçersiz sayarsa silinir.</li>
           <li>Cihazındaki geçmişi uygulama içinden silebilirsin; uygulamayı kaldırınca cihazdaki veriler de silinir.</li>
           <li>Hesabını sildiğinde; hesabın, abonelik ve araştırma hakkı kayıtların, Ek Koşullar kabul kaydın, topluluk bildirimlerin ve RevenueCat'teki müşteri kaydın silinir. Abonelik olay defterindeki kayıtlar denetim için seninle bağı kaldırılarak tutulur.</li>
           <li>Hesap silme App Store aboneliğini iptal etmez. Aktif bir aboneliğin varsa uygulama, silmeden önce aboneliği App Store'dan iptal etmen için uyarır.</li>
