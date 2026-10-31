@@ -10,34 +10,132 @@
   var client = window.supabase.createClient(env.url, env.publishableKey, {
     auth: { flowType: "implicit", detectSessionInUrl: true, persistSession: true, storageKey: "gvd-admin-" + envName }
   });
-  var $ = function (id) { return document.getElementById(id); };
-  var labels = {
+  var templates = window.GVD_ALERT_TEMPLATES || [];
+
+  var L = {
     kind: { phone: "Telefon", link: "Bağlantı", sms: "SMS", iban: "IBAN", email: "E-posta" },
     category: { fraud: "Dolandırıcılık", phishing: "Oltalama", fake_cargo: "Sahte kargo", fake_bank: "Sahte banka",
-      fake_shopping: "Sahte alışveriş", impersonation: "Kimlik taklidi", other: "Diğer" },
-    severity: { info: "Bilgi", attention: "Dikkat", high: "Yüksek risk" }
+      fake_shopping: "Sahte alışveriş/ilan", impersonation: "Kurum/kişi taklidi", other: "Diğer" },
+    severity: { info: "Bilgi", attention: "Dikkat", high: "Yüksek risk" },
+    reason: { insufficient: "Yetersiz bilgi", personal_data: "Kişisel veri içeriyor", false_claim: "Yanlış/asılsız",
+      duplicate: "Tekrar", spam: "Spam", other: "Diğer", approval_revoked: "Onay geri alındı" },
+    action: { report_approve: "Bildirim onaylandı", report_reject: "Bildirim reddedildi",
+      report_owner_confirm: "Sahibi doğruladı", report_revoke: "Onay geri alındı", report_reopen: "Yeniden incelemeye alındı",
+      alert_publish: "Uyarı yayınlandı", alert_withdraw: "Uyarı geri çekildi", alert_push: "Push gönderildi",
+      alert_update: "Uyarı düzenlendi", alert_draft_save: "Taslak kaydedildi", alert_draft_delete: "Taslak silindi" }
   };
-  $("env").textContent = envName === "sandbox" ? "Sandbox ortamı" : "Canlı ortam";
 
+  // Static icon paths (24×24, stroke).
+  var ICONS = {
+    summary: '<path d="M4 13h4v7H4zM10 9h4v11h-4zM16 4h4v16h-4z"/>',
+    reports: '<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>',
+    alerts: '<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+    audit: '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h7"/>',
+    refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
+    warn: '<path d="M12 3 2 20h20z"/><path d="M12 9v5M12 17h.01"/>',
+    shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/>',
+    check: '<path d="m5 12 4 4 10-10"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
+    phone: '<path d="M5 4h4l2 5-3 2a11 11 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
+    users: '<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 4a3 3 0 0 1 0 6M21 20a6 6 0 0 0-4-5.6"/>',
+    device: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
+    inbox: '<path d="M3 13h5l1 3h6l1-3h5"/><path d="M5 5h14l2 8v6H3v-6z"/>',
+    external: '<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>'
+  };
+  function icon(name) {
+    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("fill", "none"); svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.8"); svg.setAttribute("stroke-linecap", "round"); svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    svg.innerHTML = ICONS[name] || ""; // static markup only
+    return svg;
+  }
+
+  var $ = function (id) { return document.getElementById(id); };
   function el(tag, cls, text) {
     var node = document.createElement(tag);
     if (cls) node.className = cls;
     if (text !== undefined && text !== null) node.textContent = String(text);
     return node;
   }
-  function show(id) { ["login", "mfa", "panel"].forEach(function (s) { $(s).hidden = s !== id; }); }
+  function add(parent) { for (var i = 1; i < arguments.length; i++) if (arguments[i]) parent.append(arguments[i]); return parent; }
+  function button(label, cls, onClick, iconName) {
+    var b = el("button", "btn " + (cls || "ghost"));
+    if (iconName) b.append(icon(iconName));
+    b.append(document.createTextNode(label));
+    b.type = "button"; b.onclick = onClick;
+    return b;
+  }
   function when(iso) { return iso ? new Date(iso).toLocaleString("tr-TR", { dateStyle: "medium", timeStyle: "short" }) : "—"; }
-
-  function confirmDialog(text) {
-    return new Promise(function (resolve) {
-      $("modal-text").textContent = text;
-      $("modal").hidden = false;
-      var done = function (value) { $("modal").hidden = true; $("modal-ok").onclick = $("modal-cancel").onclick = null; resolve(value); };
-      $("modal-ok").onclick = function () { done(true); };
-      $("modal-cancel").onclick = function () { done(false); };
-    });
+  function day(iso) { return iso ? new Date(iso + (iso.length === 10 ? "T12:00:00" : "")).toLocaleDateString("tr-TR", { dateStyle: "medium" }) : "—"; }
+  function badge(text, tone) { return el("span", "badge " + (tone || ""), text); }
+  function toast(text) {
+    var t = $("toast"); t.textContent = text; t.hidden = false;
+    clearTimeout(toast.timer); toast.timer = setTimeout(function () { t.hidden = true; }, 3200);
+  }
+  function empty(iconName, title, text) {
+    var box = el("div", "empty"); box.append(icon(iconName), el("strong", null, title));
+    if (text) box.append(el("span", null, text));
+    return box;
+  }
+  function skeleton(kind) {
+    var wrap = el("div", "grid " + (kind === "kpis" ? "kpis" : ""));
+    for (var i = 0; i < (kind === "kpis" ? 6 : 3); i++) {
+      var c = el("div", "card");
+      if (kind === "kpis") add(c, el("div", "skeleton sk-line"), el("div", "skeleton sk-line"));
+      else add(c, el("div", "skeleton sk-line"), el("div", "skeleton sk-block"));
+      wrap.append(c);
+    }
+    return wrap;
   }
 
+  // Values as people write them.
+  function formatValue(kind, value) {
+    if (kind === "phone" && /^\d{10}$/.test(value)) {
+      return "0" + value.slice(0, 3) + " " + value.slice(3, 6) + " " + value.slice(6, 8) + " " + value.slice(8);
+    }
+    if (kind === "iban") return value.replace(/(.{4})/g, "$1 ").trim();
+    return value;
+  }
+  function googleLink(kind, value) {
+    var a = el("a", "btn subtle small");
+    a.href = "https://www.google.com/search?q=" + encodeURIComponent('"' + formatValue(kind, value) + '"');
+    a.target = "_blank"; a.rel = "noopener noreferrer";
+    a.append(icon("search"), document.createTextNode("Google'da ara"));
+    return a;
+  }
+
+  // Personal data in the description: a heuristic warning, never an automatic decision.
+  function luhn(digits) {
+    var sum = 0, alt = false;
+    for (var i = digits.length - 1; i >= 0; i--) {
+      var n = +digits[i]; if (alt) { n *= 2; if (n > 9) n -= 9; } sum += n; alt = !alt;
+    }
+    return sum % 10 === 0;
+  }
+  function tcValid(s) {
+    if (!/^[1-9]\d{10}$/.test(s)) return false;
+    var d = s.split("").map(Number);
+    var odd = d[0] + d[2] + d[4] + d[6] + d[8], even = d[1] + d[3] + d[5] + d[7];
+    return ((odd * 7 - even) % 10 + 10) % 10 === d[9] && (d.slice(0, 10).reduce(function (a, b) { return a + b; }, 0) % 10) === d[10];
+  }
+  var notNames = /^(Banka|Bankası|Bank|Kargo|Kargom|Telekom|Turkcell|Vodafone|Emniyet|Savcılık|Polis|Jandarma|Devlet|Bakanlığı|Müdürlüğü|Başkanlığı|Merkezi|Sahibinden|Trendyol|Hepsiburada|Whatsapp|WhatsApp|Instagram|Google|Türkiye|İstanbul|Ankara|İzmir|Hizmetleri|Müşteri|Kart|Kredi)$/;
+  function piiFlags(text) {
+    var flags = [], t = text || "";
+    var iban = /\bTR\s?\d{2}(?:\s?\d{4}){5}\s?\d{2}\b/gi;
+    // IBAN digits must not count as a card or ID number.
+    var rest = t.replace(iban, " ");
+    (rest.match(/\b[1-9]\d{10}\b/g) || []).some(tcValid) && flags.push("TC kimlik no");
+    (rest.match(/(?:\d[ -]?){13,19}/g) || []).some(function (m) { var d = m.replace(/\D/g, ""); return d.length >= 13 && d.length <= 19 && luhn(d); }) && flags.push("kart numarası");
+    /\bTR\s?\d{2}(?:\s?\d{4}){5}\s?\d{2}\b/i.test(t) && flags.push("IBAN");
+    /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(t) && flags.push("e-posta");
+    /(?:\+?90|0)?\s?5\d{2}[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}\b/.test(t) && flags.push("telefon numarası");
+    var names = t.match(/\b[A-ZÇĞİÖŞÜ][a-zçğıöşü]{2,}\s+[A-ZÇĞİÖŞÜ][a-zçğıöşü]{2,}\b/g) || [];
+    names.some(function (n) { return n.split(/\s+/).every(function (w) { return !notNames.test(w); }); }) && flags.push("ad-soyad");
+    return flags;
+  }
+
+  // ---------- API ----------
   async function api(body) {
     var session = (await client.auth.getSession()).data.session;
     if (!session) throw new Error("Oturum yok");
@@ -51,38 +149,80 @@
     if (!response.ok) throw new Error(data.result || "Hata");
     return data;
   }
+  var refusals = { not_pending: "Bu bildirim artık beklemede değil.", not_approved: "Bildirim onaylı değil.",
+    not_rejected: "Bildirim reddedilmiş değil.", not_found: "Kayıt bulunamadı.", invalid: "Bilgiler eksik ya da hatalı." };
+  async function act(body, success) {
+    try {
+      var r = await api(body);
+      if (r.ok === false) { toast(refusals[r.result] || "İşlem yapılamadı."); return null; }
+      if (success) toast(success);
+      return r;
+    } catch (e) { toast(e.message === "Yetki yok" ? "Bu hesabın yönetici yetkisi yok." : "İşlem yapılamadı."); return null; }
+  }
 
+  // ---------- dialog ----------
+  // options: title, text, value, reasons (bool), note ("required" | "optional"), noteLabel, ok, danger
+  function dialog(o) {
+    return new Promise(function (resolve) {
+      $("dialog-title").textContent = o.title; $("dialog-text").textContent = o.text || ""; $("dialog-note").textContent = "";
+      var body = $("dialog-body"); body.replaceChildren();
+      if (o.value) body.append(el("p", "value", o.value));
+      if (o.warning) add(body, banner("risk", o.warning));
+      var picked = null;
+      if (o.reasons) {
+        var list = el("div", "reasons");
+        Object.keys(L.reason).filter(function (k) { return k !== "approval_revoked"; }).forEach(function (k) {
+          var label = el("label"), input = el("input");
+          input.type = "radio"; input.name = "reason"; input.value = k;
+          input.onchange = function () { picked = k; };
+          label.append(input, document.createTextNode(L.reason[k])); list.append(label);
+        });
+        body.append(list);
+      }
+      var note = null;
+      if (o.note) {
+        var field = el("label", "field", o.noteLabel || "Not");
+        note = el("textarea"); note.maxLength = 500; note.rows = 3; field.append(note); body.append(field);
+      }
+      $("dialog-ok").textContent = o.ok || "Onayla";
+      $("dialog-ok").className = "btn " + (o.danger ? "danger solid" : "primary");
+      $("dialog").hidden = false;
+      var done = function (v) { $("dialog").hidden = true; $("dialog-ok").onclick = $("dialog-cancel").onclick = null; resolve(v); };
+      $("dialog-cancel").onclick = function () { done(null); };
+      $("dialog-ok").onclick = function () {
+        var text = note ? note.value.trim() : "";
+        if (o.reasons && !picked) { $("dialog-note").textContent = "Bir sebep seç."; return; }
+        if ((o.note === "required" || picked === "other") && text.length < 3) { $("dialog-note").textContent = "Kısa bir açıklama yaz (en az 3 karakter)."; return; }
+        done({ reason: picked, note: text });
+      };
+    });
+  }
+  function banner(tone, text, iconName) {
+    var b = el("div", "banner " + tone); b.append(icon(iconName || "warn"), el("span", null, text)); return b;
+  }
+
+  // ---------- auth ----------
+  function show(id) { ["login", "mfa", "panel"].forEach(function (s) { $(s).hidden = s !== id; }); }
+  document.querySelectorAll("[data-env]").forEach(function (n) {
+    var compact = n.classList.contains("compact");
+    n.textContent = envName === "sandbox" ? (compact ? "Sandbox" : "Sandbox (test) ortamı") : (compact ? "Canlı" : "Canlı ortam");
+    if (envName === "sandbox") n.classList.add("sandbox");
+  });
   async function route() {
     var session = (await client.auth.getSession()).data.session;
     if (!session) return show("login");
     var aal = (await client.auth.mfa.getAuthenticatorAssuranceLevel()).data;
     if (!aal || aal.currentLevel !== "aal2") return startMFA();
     show("panel");
-    loadAll();
+    go(location.hash.replace("#", "") || "summary");
   }
-
-  // Production: password + TOTP only. The e-mail link stays for the test project.
-  $("send-link").hidden = envName !== "sandbox";
   $("sign-in").onclick = async function () {
     $("sign-in").disabled = true;
     var result = await client.auth.signInWithPassword({ email: $("email").value.trim(), password: $("password").value });
-    $("password").value = "";
-    $("sign-in").disabled = false;
+    $("password").value = ""; $("sign-in").disabled = false;
     if (result.error) { $("login-note").textContent = "Giriş yapılamadı."; return; }
-    $("login-note").textContent = "";
-    route();
+    $("login-note").textContent = ""; route();
   };
-
-  $("send-link").onclick = async function () {
-    $("send-link").disabled = true;
-    var result = await client.auth.signInWithOtp({
-      email: $("email").value.trim(),
-      options: { shouldCreateUser: false, emailRedirectTo: location.origin + location.pathname + location.search }
-    });
-    $("login-note").textContent = result.error ? "Gönderilemedi." : "Bağlantı gönderildi; e-postanı kontrol et.";
-    $("send-link").disabled = false;
-  };
-
   var factorID = null;
   async function startMFA() {
     show("mfa");
@@ -91,151 +231,539 @@
     if (verified) { factorID = verified.id; $("enroll").hidden = true; return; }
     var enrolled = await client.auth.mfa.enroll({ factorType: "totp", friendlyName: "Güvende yönetim" });
     if (enrolled.error) { $("mfa-note").textContent = "Doğrulama kurulamadı."; return; }
-    factorID = enrolled.data.id;
-    $("qr").src = enrolled.data.totp.qr_code;
-    $("totp-secret").textContent = enrolled.data.totp.secret;
-    $("enroll").hidden = false;
+    factorID = enrolled.data.id; $("qr").src = enrolled.data.totp.qr_code;
+    $("totp-secret").textContent = enrolled.data.totp.secret; $("enroll").hidden = false;
   }
-
   $("verify").onclick = async function () {
     var result = await client.auth.mfa.challengeAndVerify({ factorId: factorID, code: $("code").value.trim() });
     if (result.error) { $("mfa-note").textContent = "Kod doğrulanamadı."; return; }
-    $("code").value = "";
-    route();
+    $("code").value = ""; route();
   };
-
-  async function loadAll() {
-    try {
-      var s = await api({ action: "summary" });
-      var stats = $("stats"); stats.replaceChildren();
-      [["Bugünkü araştırma", s.summary.researchesToday], ["Bekleyen bildirim", s.summary.pendingReports],
-        ["Aktif abone", s.summary.activeSubscribers], ["Test aboneliği", s.summary.activeSandboxSubscribers],
-        ["Bildirim cihazı", s.summary.pushDevices], ["Aktif uyarı", s.summary.activeAlerts]].forEach(function (pair) {
-        var box = el("div", "stat"); box.append(el("b", null, pair[1]), el("span", null, pair[0])); stats.append(box);
-      });
-      $("a-push").disabled = !s.pushReady;
-      if (!s.pushReady) $("a-push").parentNode.title = "APNs anahtarı yüklü değil";
-      await Promise.all([loadQueue(), loadAlerts()]);
-    } catch (e) {
-      if (String(e.message) === "Yetki yok") { $("stats").textContent = "Bu hesabın yönetici yetkisi yok."; }
-      else { $("stats").textContent = "Yüklenemedi."; }
-    }
-  }
-
-  async function loadQueue() {
-    var data = await api({ action: "pendingReports" });
-    var box = $("queue"); box.replaceChildren();
-    if (!data.reports.length) { box.append(el("p", "note", "Bekleyen bildirim yok.")); return; }
-    data.reports.forEach(function (r) {
-      var item = el("div", "item");
-      item.append(
-        el("div", "meta", (labels.kind[r.kind] || r.kind) + " · " + (labels.category[r.category] || r.category) + " · " + when(r.created_at)),
-        el("p", "value", r.value),
-        el("p", null, r.description),
-        el("div", "meta", "Olay tarihi: " + r.incidentDate + " · Aynı değeri bildiren: " + r.sameValueReporters +
-          " kullanıcı · onaylı: " + r.sameValueApproved)
-      );
-      var actions = el("div", "actions");
-      [["approve", "Onayla", "primary"], ["reject", "Reddet", "danger"], ["owner_confirm", "Sahibi doğruladı", "ghost"]]
-        .forEach(function (a) {
-          var b = el("button", a[2], a[1]);
-          b.onclick = async function () {
-            if (!(await confirmDialog(a[1] + ": " + r.value))) return;
-            b.disabled = true;
-            try { await api({ action: "moderate", reportId: r.id, decision: a[0] }); } catch (e) { alert("İşlem yapılamadı."); }
-            loadAll();
-          };
-          actions.append(b);
-        });
-      item.append(actions);
-      box.append(item);
-    });
-  }
-
-  async function loadAlerts() {
-    var data = await api({ action: "alerts" });
-    var box = $("alerts"); box.replaceChildren();
-    if (!data.alerts.length) { box.append(el("p", "note", "Henüz uyarı yok.")); return; }
-    data.alerts.forEach(function (a) {
-      var item = el("div", "item");
-      var head = el("div", "row");
-      head.append(el("strong", null, a.title), el("span", "tag " + (a.withdrawnAt ? "off" : a.severity),
-        a.withdrawnAt ? "Geri çekildi" : labels.severity[a.severity]));
-      item.append(head, el("p", null, a.body),
-        el("div", "meta", "Yayın: " + when(a.publishedAt) + (a.expiresAt ? " · Bitiş: " + when(a.expiresAt) : "") +
-          (a.pushRequested ? " · Push: " + a.pushSent + " başarılı, " + a.pushFailed + " başarısız" : "")));
-      if (!a.withdrawnAt) {
-        var b = el("button", "danger", "Geri çek");
-        b.onclick = async function () {
-          if (!(await confirmDialog("Bu uyarı uygulamadan kaldırılsın mı? " + a.title))) return;
-          try { await api({ action: "withdraw", alertId: a.id }); } catch (e) { alert("Geri çekilemedi."); }
-          loadAll();
-        };
-        var actions = el("div", "actions"); actions.append(b); item.append(actions);
-      }
-      box.append(item);
-    });
-  }
-
-  function draft() {
-    var expires = $("a-expires").value;
-    var steps = Array.prototype.map.call(document.querySelectorAll(".a-step"), function (i) { return i.value.trim(); })
-      .filter(function (s) { return s.length > 0; });
-    return {
-      title: $("a-title").value.trim(), body: $("a-body").value.trim(), severity: $("a-severity").value,
-      expiresAt: expires ? new Date(expires + "T23:59:00").toISOString() : null, push: $("a-push").checked,
-      protection: steps, sourceName: $("a-source-name").value.trim(), sourceURL: $("a-source-url").value.trim()
-    };
-  }
-
-  // The preview follows the app's alert detail: band, title, date, sections.
-  function phonePreview(d) {
-    var phone = el("div", "phone");
-    phone.append(el("div", "band " + d.severity, labels.severity[d.severity]), el("h3", null, d.title),
-      el("div", "meta", when(new Date().toISOString())));
-    var what = el("div", "box"); what.append(el("h4", null, "Ne oluyor?"), el("p", null, d.body)); phone.append(what);
-    if (d.protection.length) {
-      var how = el("div", "box"), list = el("ol");
-      how.append(el("h4", null, "Nasıl korunursun?"));
-      d.protection.forEach(function (s) { list.append(el("li", null, s)); });
-      how.append(list); phone.append(how);
-    }
-    if (d.sourceName) phone.append(el("p", "meta", "Kaynak: " + d.sourceName + (d.sourceURL ? " (" + d.sourceURL + ")" : "")));
-    phone.append(el("div", "share", "Ailene gönder"));
-    return phone;
-  }
-
-  $("preview").onclick = function () {
-    var d = draft(), box = $("preview-box"); box.replaceChildren();
-    if (d.title.length < 3 || d.body.length < 10) { $("publish-note").textContent = "Başlık en az 3, metin en az 10 karakter olmalı."; box.hidden = true; return; }
-    if (d.protection.length === 1) { $("publish-note").textContent = "Korunma maddeleri için en az 2 madde gir ya da hepsini boş bırak."; box.hidden = true; return; }
-    if (d.sourceURL && (!/^https:\/\/\S+$/.test(d.sourceURL) || !d.sourceName)) { $("publish-note").textContent = "Kaynak bağlantısı https:// ile başlamalı ve kaynak adı girilmeli."; box.hidden = true; return; }
-    $("publish-note").textContent = "";
-    var card = el("div", "preview");
-    card.append(phonePreview(d), el("div", "meta",
-      (d.expiresAt ? "Bitiş: " + when(d.expiresAt) : "Bitiş tarihi yok") + (d.push ? " · Push bildirimi gönderilecek" : " · Push gönderilmeyecek")));
-    var publish = el("button", "primary", "Yayınla");
-    publish.onclick = async function () {
-      var text = "Bu uyarı tüm kullanıcılara yayınlanacak" + (d.push ? " ve push bildirimi gönderilecek" : "") + ". Emin misin?";
-      if (!(await confirmDialog(text))) return;
-      publish.disabled = true;
-      try {
-        var result = await api(Object.assign({ action: "publish" }, d));
-        var push = result.push;
-        $("publish-note").textContent = "Yayınlandı." + (push ? (push.status === "notConfigured" ? " Push gönderilemedi: APNs anahtarı yok."
-          : " Push: " + push.sent + " başarılı, " + push.failed + " başarısız.") : "");
-        ["a-title", "a-body", "a-expires", "a-source-name", "a-source-url"].forEach(function (id) { $(id).value = ""; });
-        document.querySelectorAll(".a-step").forEach(function (i) { i.value = ""; });
-        $("a-push").checked = false; box.hidden = true;
-        loadAll();
-      } catch (e) { $("publish-note").textContent = "Yayınlanamadı."; publish.disabled = false; }
-    };
-    card.append(publish);
-    box.append(card); box.hidden = false;
-  };
-
-  $("refresh").onclick = loadAll;
   $("sign-out").onclick = async function () { await client.auth.signOut(); show("login"); };
+
+  // ---------- navigation ----------
+  var VIEWS = [
+    { id: "summary", label: "Özet", icon: "summary", sub: "Son 7 günün durumu" },
+    { id: "reports", label: "Bildirimler", icon: "reports", sub: "Kullanıcı bildirimlerini incele" },
+    { id: "alerts", label: "Uyarılar", icon: "alerts", sub: "Uygulamadaki uyarılar ve push bildirimleri" },
+    { id: "audit", label: "Kayıtlar", icon: "audit", sub: "Yönetici işlemlerinin denetim kaydı" }
+  ];
+  var state = { view: "summary", reportTab: "pending", pending: 0, auditFilter: "", editor: null, pushReady: false };
+  function buildNav() {
+    [["nav", ""], ["tabbar", ""]].forEach(function (pair) {
+      var host = $(pair[0]); host.replaceChildren();
+      VIEWS.forEach(function (v) {
+        var b = el("button"); b.type = "button"; b.dataset.view = v.id;
+        b.append(icon(v.icon), el("span", null, v.label));
+        if (v.id === "reports" && state.pending > 0) b.append(el("span", "count", state.pending));
+        if (v.id === state.view) b.classList.add("active");
+        b.onclick = function () { go(v.id); };
+        host.append(b);
+      });
+    });
+  }
+  $("refresh").append(icon("refresh"));
+  $("refresh").onclick = function () { go(state.view); };
+  function go(view) {
+    var v = VIEWS.find(function (x) { return x.id === view; }) || VIEWS[0];
+    state.view = v.id; history.replaceState(null, "", "#" + v.id);
+    $("view-title").textContent = v.label; $("view-sub").textContent = v.sub;
+    buildNav();
+    ({ summary: viewSummary, reports: viewReports, alerts: viewAlerts, audit: viewAudit })[v.id]();
+  }
+  function content() { var c = $("content"); c.replaceChildren(); return c; }
+
+  // ---------- Özet ----------
+  async function viewSummary() {
+    var c = content(); c.append(skeleton("kpis"));
+    var data;
+    try { data = await api({ action: "summary" }); } catch (e) { c.replaceChildren(failed(e)); return; }
+    if (state.view !== "summary") return;
+    var s = data.summary; state.pending = s.pendingReports; state.pushReady = data.pushReady; buildNav();
+    var grid = el("div", "grid kpis");
+    function kpi(label, iconName, value, foot, onClick) {
+      var k = el("div", "card kpi" + (onClick ? " link" : ""));
+      var l = el("div", "label"); l.append(icon(iconName), el("span", null, label));
+      add(k, l, el("div", "num", value), foot ? el("div", "foot", foot) : null);
+      if (onClick) k.onclick = onClick;
+      return k;
+    }
+    var week = kpi("Son 7 gün araştırma", "summary", s.researches7d, null);
+    week.classList.add("wide");
+    var max = Math.max.apply(null, s.daily.map(function (d) { return d.count; }).concat([1]));
+    var bars = el("div", "bars"), labels = el("div", "bar-labels");
+    s.daily.forEach(function (d, i) {
+      var bar = el("div", "bar" + (i === s.daily.length - 1 ? " today" : ""));
+      bar.style.height = Math.max(4, Math.round(d.count / max * 100)) + "%";
+      bar.title = day(d.day) + ": " + d.count;
+      bars.append(bar);
+      labels.append(el("span", null, new Date(d.day + "T12:00:00").toLocaleDateString("tr-TR", { weekday: "short" })));
+    });
+    add(week, bars, labels);
+    add(grid,
+      kpi("Bugün araştırma", "search", s.researchesToday, "İstanbul saatiyle bugün"),
+      week,
+      kpi("Bekleyen bildirim", "reports", s.pendingReports, s.pendingValues + " farklı değer", function () { go("reports"); }),
+      kpi("Aktif abone", "users", s.activeSubscribers, "Test aboneliği: " + s.activeSandboxSubscribers),
+      kpi("Bildirim cihazı", "device", s.pushDevices, data.pushReady ? "Push hazır" : "APNs anahtarı yok"),
+      kpi("Aktif uyarı", "alerts", s.activeAlerts, s.drafts + " taslak", function () { go("alerts"); }));
+    c.replaceChildren(grid);
+  }
+  function failed(e) {
+    return empty("warn", e.message === "Yetki yok" ? "Bu hesabın yönetici yetkisi yok." : "Yüklenemedi.", "Yenile düğmesiyle tekrar dene.");
+  }
+
+  // ---------- Bildirimler ----------
+  function viewReports() {
+    var c = content();
+    var seg = el("div", "segments");
+    [["pending", "Bekleyen"], ["approved", "Onaylananlar"], ["rejected", "Reddedilenler"]].forEach(function (t) {
+      var b = el("button", t[0] === state.reportTab ? "active" : "", t[1]); b.type = "button";
+      if (t[0] === "pending" && state.pending > 0) b.append(el("span", "count", state.pending));
+      b.onclick = function () { state.reportTab = t[0]; viewReports(); };
+      seg.append(b);
+    });
+    var body = el("div");
+    add(c, seg, body);
+    if (state.reportTab === "pending") pendingQueue(body); else reviewedList(body, state.reportTab);
+  }
+
+  function reporterChip(r) {
+    var chip = el("span", "reporter");
+    chip.append(el("span", null, "Bildiren"), el("b", null, "#" + r.reporter.alias),
+      el("span", null, "· " + r.reporter.total + " bildirim · " + r.reporter.approved + " onaylı · " + r.reporter.rejected + " reddedilen"));
+    return chip;
+  }
+
+  async function pendingQueue(box) {
+    box.append(skeleton());
+    var data;
+    try { data = await api({ action: "queue" }); } catch (e) { box.replaceChildren(failed(e)); return; }
+    if (state.view !== "reports" || state.reportTab !== "pending") return;
+    var reports = data.reports || [];
+    state.pending = reports.length; buildNav();
+    box.replaceChildren();
+    if (!reports.length) { box.append(el("div", "card", null)); box.firstChild.append(empty("inbox", "Bekleyen bildirim yok", "Yeni bildirimler burada değere göre gruplanır.")); return; }
+    var groups = [], byKey = {};
+    reports.forEach(function (r) {
+      if (!byKey[r.fingerprint]) { byKey[r.fingerprint] = { key: r.fingerprint, items: [] }; groups.push(byKey[r.fingerprint]); }
+      byKey[r.fingerprint].items.push(r);
+    });
+    var list = el("div", "grid");
+    groups.forEach(function (g) { list.append(groupCard(g)); });
+    box.append(list);
+  }
+
+  function groupCard(g) {
+    var first = g.items[0], shown = formatValue(first.kind, first.value);
+    var card = el("section", "card group");
+    var head = el("div", "group-head"), top = el("div", "group-top"), left = el("div");
+    var kinds = el("div", "actions"); add(kinds, badge(L.kind[first.kind] || first.kind, "info"),
+      g.items.length > 1 ? badge(g.items.length + " bekleyen bildirim", "warn") : null);
+    add(left, kinds, el("div", "value", shown));
+    add(top, left, googleLink(first.kind, first.value));
+    var facts = el("div", "facts");
+    var f1 = el("span"); f1.append(el("b", null, first.valueReporters), document.createTextNode(" farklı kullanıcı bildirdi"));
+    var f2 = el("span"); f2.append(el("b", null, first.valueApproved), document.createTextNode(" onaylı bildirim"));
+    add(facts, f1, f2);
+    add(head, top, facts);
+    if (first.official) {
+      head.append(banner("risk", "Bu numara " + first.official.name + " kurumunun resmî numarası olarak kayıtlı. Arayan numarayı taklit etmiş (spoofing) olabilir; onaylamadan önce dikkatle incele."));
+    }
+    card.append(head);
+    g.items.forEach(function (r) { card.append(reportRow(r, first)); });
+    if (g.items.length > 1) {
+      var ga = el("div", "group-actions");
+      add(ga,
+        button("Tümünü onayla (" + g.items.length + ")", "primary small", function () { decideGroup(g, "approve"); }, "check"),
+        button("Tümünü reddet", "danger small", function () { decideGroup(g, "reject"); }));
+      card.append(ga);
+    }
+    return card;
+  }
+
+  function reportRow(r, first) {
+    var row = el("div", "report");
+    var meta = el("div", "report-meta");
+    add(meta, badge(L.category[r.category] || r.category, "green"), el("span", null, "Bildirim: " + when(r.createdAt)),
+      el("span", null, "· Olay: " + day(r.incidentDate)));
+    row.append(meta, el("p", "desc", r.description));
+    var flags = piiFlags(r.description);
+    if (flags.length) row.append(banner("warn", "Açıklamada kişisel veri olabilir: " + flags.join(", ") + ". Onaylamadan önce kontrol et."));
+    row.append(reporterChip(r));
+    var actions = el("div", "actions");
+    add(actions,
+      button("Onayla", "primary small", function () { decideOne(r, "approve", first); }, "check"),
+      button("Reddet", "danger small", function () { decideOne(r, "reject", first); }),
+      button("Sahibi doğruladı", "ghost small", function () { decideOne(r, "owner_confirm", first); }, "shield"));
+    row.append(actions);
+    return row;
+  }
+
+  var decisionText = {
+    approve: { title: "Bildirimi onayla", text: "Onaylanan bildirimler uygulamada bu değer için yalnız sayı olarak görünür.", ok: "Onayla" },
+    owner_confirm: { title: "Sahibi doğruladı", text: "Bildirim onaylanır ve numara/hesap sahibinin doğruladığı işaretlenir; tek bildirimle de uygulamada sayılır.", ok: "Onayla" },
+    reject: { title: "Bildirimi reddet", text: "Reddedilen bildirim uygulamada sayılmaz. Bir sebep seç.", ok: "Reddet" }
+  };
+  async function decideOne(r, decision, first) {
+    var t = decisionText[decision];
+    var answer = await dialog({ title: t.title, text: t.text, value: formatValue(r.kind, r.value), reasons: decision === "reject",
+      note: "optional", noteLabel: decision === "reject" ? "Not (\"Diğer\" için zorunlu)" : "Not (isteğe bağlı)", ok: t.ok,
+      danger: decision === "reject", warning: decision !== "reject" && first.official ? "Resmî kurum numarası: taklit olabilir." : null });
+    if (!answer) return;
+    var done = await act({ action: "review", reportId: r.id, decision: decision, reason: answer.reason, note: answer.note },
+      decision === "reject" ? "Bildirim reddedildi." : "Bildirim onaylandı.");
+    if (done) viewReports();
+  }
+  async function decideGroup(g, decision) {
+    var first = g.items[0], t = decisionText[decision];
+    var answer = await dialog({ title: decision === "reject" ? "Hepsini reddet" : "Hepsini onayla",
+      text: "Bu değerin " + g.items.length + " bekleyen bildiriminin tamamı " + (decision === "reject" ? "reddedilecek." : "onaylanacak.") +
+        " Her biri denetim kaydına ayrı yazılır.",
+      value: formatValue(first.kind, first.value), reasons: decision === "reject", note: "optional",
+      noteLabel: decision === "reject" ? "Not (\"Diğer\" için zorunlu)" : "Not (isteğe bağlı)", ok: t.ok, danger: decision === "reject",
+      warning: decision !== "reject" && first.official ? "Resmî kurum numarası: taklit olabilir." : null });
+    if (!answer) return;
+    var done = await act({ action: "reviewValue", fingerprint: g.key, decision: decision, reason: answer.reason, note: answer.note });
+    if (done) { toast(done.count + " bildirim " + (decision === "reject" ? "reddedildi." : "onaylandı.")); viewReports(); }
+  }
+
+  function reviewedList(box, status) {
+    var bar = el("div", "search");
+    var q = el("input"); q.type = "search"; q.placeholder = "Değer veya açıklamada ara"; q.value = state.query || "";
+    var cat = el("select");
+    cat.append(new Option("Tüm kategoriler", ""));
+    Object.keys(L.category).forEach(function (k) { cat.append(new Option(L.category[k], k)); });
+    cat.value = state.category || "";
+    var results = el("div", "card");
+    add(bar, q, cat);
+    add(box, bar, results);
+    var timer;
+    var load = async function () {
+      state.query = q.value; state.category = cat.value;
+      results.replaceChildren(el("div", "skeleton sk-line"), el("div", "skeleton sk-line"), el("div", "skeleton sk-line"));
+      var data;
+      try { data = await api({ action: "reports", status: status, query: q.value.trim(), category: cat.value }); }
+      catch (e) { results.replaceChildren(failed(e)); return; }
+      results.replaceChildren();
+      var reports = data.reports || [];
+      if (!reports.length) {
+        results.append(empty(status === "approved" ? "check" : "inbox", status === "approved" ? "Onaylanan bildirim yok" : "Reddedilen bildirim yok",
+          q.value || cat.value ? "Aramayı değiştirerek tekrar dene." : null));
+        return;
+      }
+      reports.forEach(function (r) { results.append(reviewedRow(r, status)); });
+    };
+    q.oninput = function () { clearTimeout(timer); timer = setTimeout(load, 300); };
+    cat.onchange = load;
+    load();
+  }
+
+  function reviewedRow(r, status) {
+    var row = el("div", "list-row"), top = el("div", "row-top"), left = el("div");
+    var tags = el("div", "actions");
+    add(tags, badge(L.kind[r.kind] || r.kind, "info"), badge(L.category[r.category] || r.category, "green"),
+      r.ownerConfirmed ? badge("Sahibi doğruladı", "green") : null,
+      status === "rejected" ? badge(L.reason[r.rejectReason] || "Sebep yok", r.rejectReason === "approval_revoked" ? "warn" : "risk") : null);
+    add(left, tags, el("div", "value", formatValue(r.kind, r.value)));
+    var actions = el("div", "actions");
+    if (status === "approved") {
+      actions.append(button("Onayı geri al", "danger small", async function () {
+        var answer = await dialog({ title: "Onayı geri al", value: formatValue(r.kind, r.value),
+          text: "Bildirim reddedilenlere taşınır ve uygulamadaki sayıdan hemen düşer. Sebebi yaz (ör. itiraz).",
+          note: "required", noteLabel: "Sebep", ok: "Geri al", danger: true });
+        if (!answer) return;
+        if (await act({ action: "revoke", reportId: r.id, note: answer.note }, "Onay geri alındı.")) viewReports();
+      }));
+    } else {
+      actions.append(button("Yeniden incele", "ghost small", async function () {
+        var answer = await dialog({ title: "Yeniden incelemeye al", value: formatValue(r.kind, r.value),
+          text: "Bildirim bekleyenlere döner; sebep ve not temizlenir.", ok: "Bekleyenlere al" });
+        if (!answer) return;
+        if (await act({ action: "reopen", reportId: r.id }, "Bildirim bekleyenlere alındı.")) viewReports();
+      }));
+    }
+    add(top, left, actions);
+    row.append(top, el("p", "desc", r.description));
+    if (r.note) row.append(el("p", "small muted", "Not: " + r.note));
+    var meta = el("div", "report-meta");
+    add(meta, el("span", null, "İncelendi: " + when(r.reviewedAt)), el("span", null, "· Bu değer için " + r.valueApproved + " onaylı / " + r.valueReporters + " kullanıcı"));
+    add(row, meta, reporterChip(r));
+    return row;
+  }
+
+  // ---------- Uyarılar ----------
+  function blankEditor() {
+    return { mode: "new", id: null, draftId: null, template: null, title: "", body: "", severity: "attention",
+      protection: ["", "", "", ""], sourceName: "", sourceURL: "", expires: "", push: false };
+  }
+  async function viewAlerts() {
+    var c = content();
+    if (!state.editor) state.editor = blankEditor();
+    var layout = el("div", "grid two"), editorCard = el("section", "card"), previewCard = el("section", "card");
+    add(layout, editorCard, previewCard);
+    var lists = el("div");
+    add(c, layout, lists);
+    renderEditor(editorCard, previewCard);
+    lists.append(skeleton());
+    var drafts, alerts, audience;
+    try {
+      var results = await Promise.all([api({ action: "drafts" }), api({ action: "alerts" }), api({ action: "pushAudience" })]);
+      drafts = results[0].drafts || []; alerts = results[1].alerts || []; audience = results[2];
+    } catch (e) { lists.replaceChildren(failed(e)); return; }
+    if (state.view !== "alerts") return;
+    state.pushReady = audience.pushReady; state.audience = audience.audience;
+    renderEditor(editorCard, previewCard);
+    lists.replaceChildren();
+    var active = alerts.filter(function (a) { return !a.withdrawnAt; }), withdrawn = alerts.filter(function (a) { return a.withdrawnAt; });
+    lists.append(el("h2", "section-title", "Taslaklar"));
+    lists.append(listCard(drafts, "Taslak yok", "Şablonla başlayıp taslak olarak kaydedebilirsin.", draftRow));
+    lists.append(el("h2", "section-title", "Yayındaki uyarılar"));
+    lists.append(listCard(active, "Yayında uyarı yok", null, alertRow));
+    if (withdrawn.length) {
+      lists.append(el("h2", "section-title", "Geri çekilenler"));
+      lists.append(listCard(withdrawn, "", null, alertRow));
+    }
+  }
+  function listCard(items, emptyTitle, emptyText, row) {
+    var card = el("div", "card");
+    if (!items.length) card.append(empty("alerts", emptyTitle, emptyText));
+    items.forEach(function (i) { card.append(row(i)); });
+    return card;
+  }
+
+  function renderEditor(card, previewCard) {
+    var e = state.editor;
+    card.replaceChildren();
+    var head = el("div", "card-head");
+    add(head, el("h2", null, e.mode === "edit" ? "Uyarıyı düzenle" : e.mode === "draft" ? "Taslağı düzenle" : "Yeni uyarı"),
+      e.mode !== "new" ? button("Yeni uyarı", "subtle small", function () { state.editor = blankEditor(); renderEditor(card, previewCard); }) : null);
+    card.append(head);
+    if (e.mode === "new") {
+      card.append(el("p", "small muted", "Hazır şablonlar"));
+      var chips = el("div", "templates");
+      templates.forEach(function (t) {
+        var chip = el("button", "chip" + (e.template === t.id ? " active" : ""), t.label); chip.type = "button";
+        chip.onclick = function () {
+          Object.assign(e, { template: t.id, title: t.title, body: t.body, severity: t.severity,
+            protection: t.protection.concat(["", "", "", ""]).slice(0, 4) });
+          renderEditor(card, previewCard);
+        };
+        chips.append(chip);
+      });
+      card.append(chips);
+    }
+    var preview = function () { renderPreview(previewCard); };
+    function input(label, key, attrs, area) {
+      var f = el("label", "field", label), i = el(area ? "textarea" : "input");
+      Object.assign(i, attrs || {}); i.value = e[key] || "";
+      i.oninput = function () { e[key] = i.value; preview(); };
+      f.append(i); return f;
+    }
+    card.append(input("Başlık", "title", { maxLength: 80, placeholder: "ör. Sahte kargo SMS'leri yayılıyor" }));
+    card.append(input("Ne oluyor?", "body", { maxLength: 2000, rows: 5 }, true));
+    card.append(el("p", "small muted", "Nasıl korunursun? (2–4 madde ya da hiç)"));
+    var steps = el("div", "steps-grid");
+    e.protection.forEach(function (s, i) {
+      var inp = el("input"); inp.maxLength = 200; inp.placeholder = (i + 1) + ". madde"; inp.value = s;
+      inp.oninput = function () { e.protection[i] = inp.value; preview(); };
+      steps.append(inp);
+    });
+    card.append(steps);
+    var row = el("div", "row-2");
+    var sev = el("label", "field", "Önem"), sel = el("select");
+    Object.keys(L.severity).forEach(function (k) { sel.append(new Option(L.severity[k], k)); });
+    sel.value = e.severity; sel.onchange = function () { e.severity = sel.value; preview(); }; sev.append(sel);
+    add(row, sev, input("Bitiş tarihi (isteğe bağlı)", "expires", { type: "date" }));
+    card.append(row);
+    var row2 = el("div", "row-2");
+    add(row2, input("Kaynak adı (isteğe bağlı)", "sourceName", { maxLength: 120, placeholder: "ör. USOM" }),
+      input("Kaynak bağlantısı (https://)", "sourceURL", { maxLength: 500, type: "url", placeholder: "https://" }));
+    card.append(row2);
+    if (e.mode !== "edit") {
+      var push = el("label", "check"), box = el("input"); box.type = "checkbox"; box.checked = e.push; box.disabled = !state.pushReady;
+      box.onchange = function () { e.push = box.checked; };
+      push.append(box, document.createTextNode(state.pushReady ? "Push bildirimi olarak da gönder" : "Push gönderilemez (APNs anahtarı yok)"));
+      card.append(push);
+    }
+    var note = el("p", "form-note");
+    var actions = el("div", "editor-actions");
+    if (e.mode === "edit") {
+      actions.append(button("Değişiklikleri kaydet", "primary", function () { saveEdit(note); }, "check"));
+    } else {
+      add(actions, button("Yayınla…", "primary", function () { publish(note); }, "alerts"),
+        button("Taslak olarak kaydet", "ghost", function () { saveDraft(note); }));
+    }
+    add(card, actions, note);
+    renderPreview(previewCard);
+  }
+
+  function draftValues() {
+    var e = state.editor;
+    return { title: e.title.trim(), body: e.body.trim(), severity: e.severity,
+      protection: e.protection.map(function (s) { return s.trim(); }).filter(Boolean),
+      sourceName: e.sourceName.trim(), sourceURL: e.sourceURL.trim(),
+      expiresAt: e.expires ? new Date(e.expires + "T23:59:00").toISOString() : null };
+  }
+  function problems(d) {
+    if (d.title.length < 3) return "Başlık en az 3 karakter olmalı.";
+    if (d.body.length < 10) return "\"Ne oluyor?\" en az 10 karakter olmalı.";
+    if (d.protection.length === 1) return "Korunma için en az 2 madde gir ya da hepsini boş bırak.";
+    if (d.protection.some(function (s) { return s.length < 3; })) return "Her madde en az 3 karakter olmalı.";
+    if (d.sourceURL && (!/^https:\/\/\S+$/.test(d.sourceURL) || !d.sourceName)) return "Kaynak bağlantısı https:// ile başlamalı ve kaynak adı girilmeli.";
+    return null;
+  }
+  function renderPreview(card) {
+    var d = draftValues();
+    card.replaceChildren();
+    var head = el("div", "card-head"); add(head, el("h2", null, "Önizleme"), el("span", "small muted", "Uygulamadaki görünüm"));
+    var phone = el("div", "phone");
+    add(phone, el("div", "band " + d.severity, L.severity[d.severity]), el("h3", null, d.title || "Başlık"),
+      el("div", "date", when(new Date().toISOString())));
+    var what = el("div", "box"); add(what, el("h4", null, "Ne oluyor?"), el("p", null, d.body || "Metin")); phone.append(what);
+    if (d.protection.length) {
+      var how = el("div", "box"), list = el("ol"); how.append(el("h4", null, "Nasıl korunursun?"));
+      d.protection.forEach(function (s) { list.append(el("li", null, s)); }); how.append(list); phone.append(how);
+    }
+    if (d.sourceName) phone.append(el("p", "src", "Kaynak: " + d.sourceName));
+    phone.append(el("div", "share", "Ailene gönder"));
+    add(card, head, phone);
+  }
+
+  async function saveDraft(note) {
+    var e = state.editor, d = draftValues();
+    if (!d.title && !d.body) { note.textContent = "Taslak için en az bir başlık ya da metin yaz."; return; }
+    var r = await act(Object.assign({ action: "saveDraft", id: e.draftId, template: e.template }, d), "Taslak kaydedildi.");
+    if (r) { e.draftId = r.id; e.mode = "draft"; viewAlerts(); }
+  }
+  async function publish(note) {
+    var e = state.editor, d = draftValues(), problem = problems(d);
+    note.textContent = problem || "";
+    if (problem) return;
+    var first = await dialog({ title: "Uyarıyı yayınla", value: d.title,
+      text: "Bu uyarı uygulamadaki Uyarılar sekmesinde tüm kullanıcılara görünecek." + (e.push ? " Ardından push bildirimi onayı istenecek." : " Push gönderilmeyecek."),
+      ok: e.push ? "Devam" : "Yayınla" });
+    if (!first) return;
+    if (e.push) {
+      var a = state.audience || { production: 0, sandbox: 0 };
+      var second = await dialog({ title: "Push bildirimi gönder", danger: true, ok: "Gönder ve yayınla",
+        text: (a.production + a.sandbox) + " cihaza bildirim gidecek (canlı: " + a.production + ", test: " + a.sandbox + "). Gönderilen bildirim geri alınamaz." });
+      if (!second) return;
+    }
+    var r = await act(Object.assign({ action: "publish", push: e.push, draftId: e.draftId }, d));
+    if (!r) return;
+    var push = r.push;
+    toast("Yayınlandı." + (push ? (push.status === "notConfigured" ? " Push gönderilemedi: APNs anahtarı yok." : " Push: " + push.sent + " başarılı, " + push.failed + " başarısız.") : ""));
+    state.editor = blankEditor(); viewAlerts();
+  }
+  async function saveEdit(note) {
+    var e = state.editor, d = draftValues(), problem = problems(d);
+    note.textContent = problem || "";
+    if (problem) return;
+    var ok = await dialog({ title: "Değişiklikleri kaydet", value: d.title, text: "Uygulamadaki uyarı hemen güncellenir. Push yeniden gönderilmez." });
+    if (!ok) return;
+    if (await act(Object.assign({ action: "updateAlert", alertId: e.id }, d), "Uyarı güncellendi.")) { state.editor = blankEditor(); viewAlerts(); }
+  }
+  function loadIntoEditor(source, mode) {
+    state.editor = { mode: mode, id: mode === "edit" ? source.id : null, draftId: mode === "draft" ? source.id : null,
+      template: source.template || null, title: source.title || "", body: source.body || "", severity: source.severity || "attention",
+      protection: (source.protection || []).concat(["", "", "", ""]).slice(0, 4), sourceName: source.sourceName || "",
+      sourceURL: source.sourceURL || "", expires: source.expiresAt ? source.expiresAt.slice(0, 10) : "", push: false };
+    viewAlerts(); window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  function draftRow(d) {
+    var row = el("div", "alert-row"), top = el("div", "row-top"), left = el("div");
+    add(left, el("h3", null, d.title || "(başlıksız taslak)"), el("p", "small muted", "Son düzenleme: " + when(d.updatedAt)));
+    var actions = el("div", "actions");
+    add(actions, button("Düzenle", "ghost small", function () { loadIntoEditor(d, "draft"); }),
+      button("Sil", "danger small", async function () {
+        if (!(await dialog({ title: "Taslağı sil", value: d.title || "(başlıksız)", ok: "Sil", danger: true }))) return;
+        if (await act({ action: "deleteDraft", id: d.id }, "Taslak silindi.")) viewAlerts();
+      }));
+    add(top, left, badge(L.severity[d.severity], d.severity === "high" ? "risk" : d.severity === "attention" ? "warn" : "info"));
+    add(row, top, actions);
+    return row;
+  }
+  function alertRow(a) {
+    var row = el("div", "alert-row"), top = el("div", "row-top");
+    add(top, el("h3", null, a.title), a.withdrawnAt ? badge("Geri çekildi") :
+      badge(L.severity[a.severity], a.severity === "high" ? "risk" : a.severity === "attention" ? "warn" : "info"));
+    row.append(top);
+    var meta = el("div", "report-meta");
+    add(meta, el("span", null, "Yayın: " + when(a.publishedAt)), a.expiresAt ? el("span", null, "· Bitiş: " + when(a.expiresAt)) : null,
+      a.withdrawnAt ? el("span", null, "· Geri çekildi: " + when(a.withdrawnAt)) : null);
+    row.append(meta);
+    row.append(a.pushRequested
+      ? add(el("div", "actions"), badge("Push: " + a.pushSent + " başarılı", "green"), badge(a.pushFailed + " başarısız", a.pushFailed ? "risk" : ""))
+      : el("p", "small muted", "Push gönderilmedi"));
+    if (!a.withdrawnAt) {
+      var actions = el("div", "actions");
+      add(actions, button("Düzenle", "ghost small", function () { loadIntoEditor(a, "edit"); }),
+        button("Geri çek", "danger small", async function () {
+          if (!(await dialog({ title: "Uyarıyı geri çek", value: a.title, text: "Uyarı uygulamadan kaldırılır.", ok: "Geri çek", danger: true }))) return;
+          if (await act({ action: "withdraw", alertId: a.id }, "Uyarı geri çekildi.")) viewAlerts();
+        }));
+      row.append(actions);
+    }
+    return row;
+  }
+
+  // ---------- Kayıtlar ----------
+  function viewAudit() {
+    var c = content();
+    var bar = el("div", "search"), sel = el("select");
+    [["", "Tüm işlemler"], ["report", "Bildirim işlemleri"], ["alert", "Uyarı işlemleri"]].concat(
+      Object.keys(L.action).map(function (k) { return [k, L.action[k]]; })).forEach(function (o) { sel.append(new Option(o[1], o[0])); });
+    sel.value = state.auditFilter;
+    sel.onchange = function () { state.auditFilter = sel.value; viewAudit(); };
+    bar.append(sel);
+    var card = el("div", "card"), table = el("table", "table"), thead = el("thead"), tbody = el("tbody"), hr = el("tr");
+    ["Zaman", "Kim", "İşlem", "Ayrıntı"].forEach(function (h) { hr.append(el("th", null, h)); });
+    thead.append(hr); add(table, thead, tbody);
+    var more = button("Daha eski kayıtlar", "ghost small");
+    add(card, table, more);
+    add(c, bar, card);
+    var before = null;
+    var load = async function () {
+      more.disabled = true;
+      var data;
+      try { data = await api({ action: "audit", filter: state.auditFilter, before: before }); }
+      catch (e) { card.replaceChildren(failed(e)); return; }
+      var entries = data.entries || [];
+      if (!entries.length && before === null) { card.replaceChildren(empty("audit", "Kayıt yok", "Yönetici işlemleri burada listelenir.")); return; }
+      entries.forEach(function (x) {
+        var tr = el("tr");
+        add(tr, el("td", "when", when(x.at)), el("td", null, x.actor), el("td", null, L.action[x.action] || x.action),
+          el("td", "detail", details(x)));
+        tbody.append(tr);
+      });
+      before = entries.length ? entries[entries.length - 1].id : before;
+      more.disabled = entries.length < 50; more.hidden = entries.length < 50;
+    };
+    more.onclick = load;
+    load();
+  }
+  function details(x) {
+    var d = x.details || {}, parts = [];
+    if (d.reason) parts.push("Sebep: " + (L.reason[d.reason] || d.reason));
+    if (d.previousReason) parts.push("Önceki sebep: " + (L.reason[d.previousReason] || d.previousReason));
+    if (d.note) parts.push("Not: " + d.note);
+    if (d.severity) parts.push("Önem: " + (L.severity[d.severity] || d.severity));
+    if (d.push === true) parts.push("Push istendi");
+    if (d.sent !== undefined) parts.push(d.sent + " başarılı, " + d.failed + " başarısız");
+    if (d.template) {
+      var tpl = templates.find(function (t) { return t.id === d.template; });
+      parts.push("Şablon: " + (tpl ? tpl.label : d.template));
+    }
+    if (x.targetId) parts.push("Kayıt: " + String(x.targetId).slice(0, 8));
+    return parts.join(" · ") || "—";
+  }
+
+  // Back/forward and links like #reports switch the view.
+  window.addEventListener("hashchange", function () {
+    var view = location.hash.replace("#", "");
+    if (!$("panel").hidden && view && view !== state.view) go(view);
+  });
   client.auth.onAuthStateChange(function (event) { if (event === "SIGNED_IN") route(); });
   route();
 })();

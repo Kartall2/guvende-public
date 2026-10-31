@@ -2,102 +2,82 @@
 <html lang="tr">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="robots" content="noindex, nofollow">
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data:; connect-src https://*.supabase.co; base-uri 'none'; form-action 'none'">
     <title>Güvende Yönetim</title>
-    <link rel="stylesheet" href="../assets/styles.css" type="text/css">
     <link rel="stylesheet" href="admin.css" type="text/css">
   </head>
   <body>
-    <div class="shell admin" role="main">
-      <div class="hero compact">
-        <p class="brand">Güvende</p>
-        <h1>Yönetim</h1>
-        <p class="env" id="env"></p>
-      </div>
+    <!-- Sign-in: password, then the 6-digit code from the authenticator app. -->
+    <main class="gate" id="login" hidden>
+      <section class="gate-card">
+        <div class="logo-row"><span class="logo" aria-hidden="true">G</span><div><strong>Güvende</strong><small>Yönetim paneli</small></div></div>
+        <h1>Giriş</h1>
+        <p class="muted">Yönetici e-postası ve şifresiyle gir; ardından doğrulama uygulamandaki 6 haneli kod istenir.</p>
+        <label class="field">E-posta<input id="email" type="email" autocomplete="username" value="guvendeapp@gmail.com"></label>
+        <label class="field">Şifre<input id="password" type="password" autocomplete="current-password"></label>
+        <button class="btn primary block" id="sign-in">Giriş yap</button>
+        <p class="form-note" id="login-note" role="status"></p>
+        <p class="env-tag" data-env></p>
+      </section>
+    </main>
 
-      <div class="card" id="login" hidden>
-        <h2>Giriş</h2>
-        <p>Yönetici e-postası ve şifresiyle gir; ardından doğrulama uygulamandaki 6 haneli kod istenir.</p>
-        <label>E-posta<input id="email" type="email" autocomplete="username" value="guvendeapp@gmail.com"></label>
-        <label>Şifre<input id="password" type="password" autocomplete="current-password"></label>
-        <button class="primary" id="sign-in">Giriş yap</button>
-        <button class="ghost" id="send-link" hidden>Giriş bağlantısı gönder (yalnız test ortamı)</button>
-        <p class="note" id="login-note"></p>
-      </div>
-
-      <div class="card" id="mfa" hidden>
-        <h2>İki adımlı doğrulama</h2>
+    <main class="gate" id="mfa" hidden>
+      <section class="gate-card">
+        <div class="logo-row"><span class="logo" aria-hidden="true">G</span><div><strong>Güvende</strong><small>Yönetim paneli</small></div></div>
+        <h1>İki adımlı doğrulama</h1>
         <div id="enroll" hidden>
-          <p>Doğrulama uygulamasıyla (Google Authenticator vb.) bu kodu tara, sonra 6 haneli kodu gir.</p>
-          <img id="qr" alt="Doğrulama QR kodu">
-          <p class="note">Elle eklemek için anahtar: <code id="totp-secret"></code></p>
+          <p class="muted">Doğrulama uygulamasıyla (Google Authenticator vb.) bu kodu tara, sonra 6 haneli kodu gir.</p>
+          <img id="qr" class="qr" alt="Doğrulama QR kodu">
+          <p class="muted small">Elle eklemek için anahtar: <code id="totp-secret"></code></p>
         </div>
-        <label>6 haneli kod<input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label>
-        <button class="primary" id="verify">Doğrula</button>
-        <p class="note" id="mfa-note"></p>
-      </div>
+        <label class="field">6 haneli kod<input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label>
+        <button class="btn primary block" id="verify">Doğrula</button>
+        <p class="form-note" id="mfa-note" role="status"></p>
+      </section>
+    </main>
 
-      <div id="panel" hidden>
-        <div class="card">
-          <div class="row"><h2>Özet</h2><button class="ghost" id="refresh">Yenile</button></div>
-          <div class="stats" id="stats"></div>
+    <div class="app" id="panel" hidden>
+      <aside class="sidebar" aria-label="Menü">
+        <div class="logo-row"><span class="logo" aria-hidden="true">G</span><div><strong>Güvende</strong><small>Yönetim</small></div></div>
+        <nav class="nav" id="nav"></nav>
+        <div class="sidebar-foot">
+          <p class="env-tag" data-env></p>
+          <button class="btn ghost block" id="sign-out">Çıkış yap</button>
         </div>
-
-        <div class="card">
-          <h2>Bildirim kuyruğu</h2>
-          <div id="queue"></div>
-        </div>
-
-        <div class="card">
-          <h2>Uyarı yayınla</h2>
-          <label>Başlık<input id="a-title" maxlength="80"></label>
-          <label>Ne oluyor? (metin)<textarea id="a-body" maxlength="2000" rows="5"></textarea></label>
-          <fieldset class="steps">
-            <legend>Nasıl korunursun? (isteğe bağlı, 2–4 madde)</legend>
-            <input class="a-step" maxlength="200" placeholder="1. madde">
-            <input class="a-step" maxlength="200" placeholder="2. madde">
-            <input class="a-step" maxlength="200" placeholder="3. madde">
-            <input class="a-step" maxlength="200" placeholder="4. madde">
-          </fieldset>
-          <label>Kaynak adı (isteğe bağlı)<input id="a-source-name" maxlength="120" placeholder="ör. Siber Güvenlik Başkanlığı"></label>
-          <label>Kaynak bağlantısı (isteğe bağlı, https://)<input id="a-source-url" type="url" maxlength="500" placeholder="https://"></label>
-          <label>Önem
-            <select id="a-severity">
-              <option value="info">Bilgi</option>
-              <option value="attention">Dikkat</option>
-              <option value="high">Yüksek risk</option>
-            </select>
-          </label>
-          <label>Bitiş tarihi (isteğe bağlı)<input id="a-expires" type="date"></label>
-          <label class="check"><input id="a-push" type="checkbox"> Push bildirimi olarak da gönder</label>
-          <button class="ghost" id="preview">Önizle</button>
-          <div id="preview-box" hidden></div>
-          <p class="note" id="publish-note"></p>
-        </div>
-
-        <div class="card">
-          <h2>Yayınlanan uyarılar</h2>
-          <div id="alerts"></div>
-        </div>
-
-        <button class="ghost" id="sign-out">Çıkış yap</button>
-      </div>
-
-      <div class="modal" id="modal" hidden>
-        <div class="modal-card">
-          <p id="modal-text"></p>
-          <div class="row">
-            <button class="ghost" id="modal-cancel">Vazgeç</button>
-            <button class="primary" id="modal-ok">Onayla</button>
+      </aside>
+      <div class="main">
+        <header class="topbar">
+          <div><h1 id="view-title">Özet</h1><p class="muted small" id="view-sub"></p></div>
+          <div class="topbar-actions">
+            <span class="env-tag compact" data-env></span>
+            <button class="btn ghost icon-btn" id="refresh" aria-label="Yenile" title="Yenile"></button>
           </div>
+        </header>
+        <div class="content" id="content"></div>
+      </div>
+      <nav class="tabbar" id="tabbar" aria-label="Sekmeler"></nav>
+    </div>
+
+    <div class="dialog-backdrop" id="dialog" hidden>
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+        <h2 id="dialog-title"></h2>
+        <p id="dialog-text" class="muted"></p>
+        <div id="dialog-body"></div>
+        <p class="form-note" id="dialog-note" role="status"></p>
+        <div class="dialog-actions">
+          <button class="btn ghost" id="dialog-cancel">Vazgeç</button>
+          <button class="btn primary" id="dialog-ok">Onayla</button>
         </div>
       </div>
     </div>
+    <div class="toast" id="toast" role="status" hidden></div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
     <script src="config.js"></script>
+    <script src="templates.js"></script>
     <script src="admin.js"></script>
   </body>
 </html>
