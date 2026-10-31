@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data:; connect-src https://*.supabase.co; base-uri 'none'; form-action 'none'">
+    <title>Güvende Yönetim</title>
+    <link rel="stylesheet" href="../assets/styles.css" type="text/css">
+    <link rel="stylesheet" href="admin.css" type="text/css">
+  </head>
+  <body>
+    <div class="shell admin" role="main">
+      <div class="hero compact">
+        <p class="brand">Güvende</p>
+        <h1>Yönetim</h1>
+        <p class="env" id="env"></p>
+      </div>
+
+      <div class="card" id="login" hidden>
+        <h2>Giriş</h2>
+        <p>Yönetici e-postana tek kullanımlık giriş bağlantısı gönderilir.</p>
+        <label>E-posta<input id="email" type="email" autocomplete="email" value="guvendeapp@gmail.com"></label>
+        <button class="primary" id="send-link">Giriş bağlantısı gönder</button>
+        <p class="note" id="login-note"></p>
+      </div>
+
+      <div class="card" id="mfa" hidden>
+        <h2>İki adımlı doğrulama</h2>
+        <div id="enroll" hidden>
+          <p>Doğrulama uygulamasıyla (Google Authenticator vb.) bu kodu tara, sonra 6 haneli kodu gir.</p>
+          <img id="qr" alt="Doğrulama QR kodu">
+          <p class="note">Elle eklemek için anahtar: <code id="totp-secret"></code></p>
+        </div>
+        <label>6 haneli kod<input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label>
+        <button class="primary" id="verify">Doğrula</button>
+        <p class="note" id="mfa-note"></p>
+      </div>
+
+      <div id="panel" hidden>
+        <div class="card">
+          <div class="row"><h2>Özet</h2><button class="ghost" id="refresh">Yenile</button></div>
+          <div class="stats" id="stats"></div>
+        </div>
+
+        <div class="card">
+          <h2>Bildirim kuyruğu</h2>
+          <div id="queue"></div>
+        </div>
+
+        <div class="card">
+          <h2>Uyarı yayınla</h2>
+          <label>Başlık<input id="a-title" maxlength="80"></label>
+          <label>Metin<textarea id="a-body" maxlength="2000" rows="5"></textarea></label>
+          <label>Önem
+            <select id="a-severity">
+              <option value="info">Bilgi</option>
+              <option value="attention">Dikkat</option>
+              <option value="high">Yüksek risk</option>
+            </select>
+          </label>
+          <label>Bitiş tarihi (isteğe bağlı)<input id="a-expires" type="date"></label>
+          <label class="check"><input id="a-push" type="checkbox"> Push bildirimi olarak da gönder</label>
+          <button class="ghost" id="preview">Önizle</button>
+          <div id="preview-box" hidden></div>
+          <p class="note" id="publish-note"></p>
+        </div>
+
+        <div class="card">
+          <h2>Yayınlanan uyarılar</h2>
+          <div id="alerts"></div>
+        </div>
+
+        <button class="ghost" id="sign-out">Çıkış yap</button>
+      </div>
+
+      <div class="modal" id="modal" hidden>
+        <div class="modal-card">
+          <p id="modal-text"></p>
+          <div class="row">
+            <button class="ghost" id="modal-cancel">Vazgeç</button>
+            <button class="primary" id="modal-ok">Onayla</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
+    <script src="config.js"></script>
+    <script src="admin.js"></script>
+  </body>
+</html>
