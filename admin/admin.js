@@ -59,6 +59,18 @@
     loadAll();
   }
 
+  // Production: password + TOTP only. The e-mail link stays for the test project.
+  $("send-link").hidden = envName !== "sandbox";
+  $("sign-in").onclick = async function () {
+    $("sign-in").disabled = true;
+    var result = await client.auth.signInWithPassword({ email: $("email").value.trim(), password: $("password").value });
+    $("password").value = "";
+    $("sign-in").disabled = false;
+    if (result.error) { $("login-note").textContent = "Giriş yapılamadı."; return; }
+    $("login-note").textContent = "";
+    route();
+  };
+
   $("send-link").onclick = async function () {
     $("send-link").disabled = true;
     var result = await client.auth.signInWithOtp({

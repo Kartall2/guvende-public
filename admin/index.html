@@ -20,9 +20,11 @@
 
       <div class="card" id="login" hidden>
         <h2>Giriş</h2>
-        <p>Yönetici e-postana tek kullanımlık giriş bağlantısı gönderilir.</p>
-        <label>E-posta<input id="email" type="email" autocomplete="email" value="guvendeapp@gmail.com"></label>
-        <button class="primary" id="send-link">Giriş bağlantısı gönder</button>
+        <p>Yönetici e-postası ve şifresiyle gir; ardından doğrulama uygulamandaki 6 haneli kod istenir.</p>
+        <label>E-posta<input id="email" type="email" autocomplete="username" value="guvendeapp@gmail.com"></label>
+        <label>Şifre<input id="password" type="password" autocomplete="current-password"></label>
+        <button class="primary" id="sign-in">Giriş yap</button>
+        <button class="ghost" id="send-link" hidden>Giriş bağlantısı gönder (yalnız test ortamı)</button>
         <p class="note" id="login-note"></p>
       </div>
 
