@@ -53,6 +53,7 @@
           <li><strong>Abonelik bilgileri:</strong> abonelik ürünü, deneme veya ücretli dönem, bitiş tarihi, App Store işlem bilgileri ve Premium Ek Koşullar'ı kabul ettiğin tarih ile sürüm.</li>
           <li><strong>Kullanım hakkı bilgileri:</strong> aylık limit, kullanılan ve kalan araştırma hakkı.</li>
           <li><strong>Arama geçmişi (araştırma girdileri):</strong> araştırmasını başlattığın telefon numarası, bağlantı veya alan adı. Bunlar sorguladığın numara ve adreslerdir; kendi telefon numaran değildir.</li>
+          <li><strong>Topluluk bildirimleri:</strong> "Bilgi ekle" ile gönderdiğin tür (numara, link, SMS içeriği, IBAN veya e-posta), değer, kategori, en fazla 500 karakterlik açıklama ve olay tarihi. Görsel veya dosya eki alınmaz.</li>
           <li><strong>Teknik bilgiler:</strong> IP adresi ve istek bilgileri gibi altyapı kayıtları.</li>
           <li><strong>Cihazda kalan bilgiler:</strong> maskelenmiş kontrol geçmişi ve tercihler. IBAN, e-posta ve mesaj metinleri cihazında analiz edilir, sunucuya gönderilmez.</li>
         </ul>
@@ -64,6 +65,7 @@
           <li>Başlattığın kontrolü ve araştırmayı yapmak, sonucu göstermek.</li>
           <li>Hesabını, Premium aboneliğini ve aylık araştırma hakkını yönetmek.</li>
           <li>Güvenliği sağlamak, kötüye kullanımı ve dolandırıcılığı önlemek.</li>
+          <li>Topluluk bildirimlerini incelemek ve onaylananları anonim sayı olarak göstermek.</li>
           <li>Hesap silme ve veri taleplerini yerine getirmek.</li>
         </ul>
         <p>Verilerini reklam, takip veya profilleme için kullanmıyoruz; veri satmıyoruz.</p>
@@ -74,7 +76,7 @@
         <ul>
           <li>Sözleşmenin kurulması ve ifası (KVKK m. 5/2-c): uygulama hizmeti ve Premium abonelik.</li>
           <li>Hukuki yükümlülüğün yerine getirilmesi (KVKK m. 5/2-ç): yasal saklama ve bildirim yükümlülükleri.</li>
-          <li>Meşru menfaat (KVKK m. 5/2-f): güvenlik ve kötüye kullanımın önlenmesi.</li>
+          <li>Meşru menfaat (KVKK m. 5/2-f): güvenlik, kötüye kullanımın önlenmesi ve topluluk bildirimlerinin dolandırıcılığa karşı anonim istatistik olarak kullanılması.</li>
         </ul>
       </div>
 
@@ -89,6 +91,18 @@
       </div>
 
       <div class="card">
+        <h2>Topluluk bildirimleri ve itiraz</h2>
+        <ul>
+          <li>Bildirim göndermek için Apple ile giriş yapman ve "Bildirimim doğrudur ve başkalarının kişisel verisini içermez" onayını vermen gerekir. Açıklamaya başkalarının adını, kimlik, kart veya iletişim bilgisini yazma.</li>
+          <li>Bildirimler ham hâliyle hiçbir kullanıcıya gösterilmez. Önce Güvende tarafından incelenir.</li>
+          <li>Onaylanan bildirimler sonuç ekranında yalnız "Güvende kullanıcılarından N doğrulanmış bildirim" biçiminde sayı olarak görünür. Bildiren kişi, açıklama ve tarih gösterilmez. Sayı, en az iki farklı kullanıcının bildirimi onaylandığında ya da Güvende bildirimi ayrıca doğruladığında oluşur. Bu bir hüküm değildir.</li>
+          <li>Kullanıcı başına günde en fazla 5 bildirim gönderilebilir; aynı değer aynı kullanıcı tarafından ikinci kez bildirilemez.</li>
+          <li><strong>İtiraz:</strong> Numaranın veya adresin sana ait olduğunu ya da yanlış işaretlendiğini düşünüyorsan sonuç ekranındaki "Bu numara benim / yanlış işaretlendi" bağlantısıyla ya da <a href="mailto:guvendeapp@gmail.com">guvendeapp@gmail.com</a> adresine yazarak itiraz edebilirsin. İtirazın incelenir; haklı bulunursa ilgili bildirimler özetten çıkarılır.</li>
+          <li>Bildirimlerin hesabın açık olduğu sürece saklanır; hesabını silince silinir.</li>
+        </ul>
+      </div>
+
+      <div class="card">
         <h2>Aktarım ve yurt dışına aktarım</h2>
         <p>
           Kişisel verilerin yalnız hizmeti sunmak için aşağıdaki hizmet
@@ -98,8 +112,8 @@
         <h3>Supabase (Güvende sunucusu ve veritabanı)</h3>
         <ul>
           <li>Ülke: Almanya (Frankfurt)</li>
-          <li>Amaç: hesap, abonelik, araştırma hakkı ve araştırma servisi</li>
-          <li>Giden veri: hesap kimliği, e-posta, abonelik ve hak kayıtları, araştırma girdisi, teknik bilgiler</li>
+          <li>Amaç: hesap, abonelik, araştırma hakkı, araştırma servisi ve topluluk bildirimleri</li>
+          <li>Giden veri: hesap kimliği, e-posta, abonelik ve hak kayıtları, araştırma girdisi, topluluk bildirimleri, teknik bilgiler</li>
         </ul>
         <h3>Brave Search API (Brave Software)</h3>
         <ul>
@@ -147,7 +161,7 @@
           <li>Hesap ve abonelik kayıtları hesabın açık olduğu sürece tutulur.</li>
           <li>Araştırma önbelleği yukarıdaki sürelerde silinir.</li>
           <li>Cihazındaki geçmişi uygulama içinden silebilirsin; uygulamayı kaldırınca cihazdaki veriler de silinir.</li>
-          <li>Hesabını sildiğinde; hesabın, abonelik ve araştırma hakkı kayıtların, Ek Koşullar kabul kaydın ve RevenueCat'teki müşteri kaydın silinir. Abonelik olay defterindeki kayıtlar denetim için seninle bağı kaldırılarak tutulur.</li>
+          <li>Hesabını sildiğinde; hesabın, abonelik ve araştırma hakkı kayıtların, Ek Koşullar kabul kaydın, topluluk bildirimlerin ve RevenueCat'teki müşteri kaydın silinir. Abonelik olay defterindeki kayıtlar denetim için seninle bağı kaldırılarak tutulur.</li>
           <li>Hesap silme App Store aboneliğini iptal etmez. Aktif bir aboneliğin varsa uygulama, silmeden önce aboneliği App Store'dan iptal etmen için uyarır.</li>
         </ul>
       </div>
