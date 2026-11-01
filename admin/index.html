@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="robots" content="noindex, nofollow">
     <meta name="referrer" content="no-referrer">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data:; connect-src https://*.supabase.co; base-uri 'none'; form-action 'none'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://*.supabase.co; base-uri 'none'; form-action 'none'">
     <title>Güvende Yönetim</title>
     <link rel="stylesheet" href="admin.css" type="text/css">
   </head>
@@ -16,7 +16,7 @@
         <div class="logo-row"><span class="logo" aria-hidden="true">G</span><div><strong>Güvende</strong><small>Yönetim paneli</small></div></div>
         <h1>Giriş</h1>
         <p class="muted">Yönetici e-postası ve şifresiyle gir; ardından doğrulama uygulamandaki 6 haneli kod istenir.</p>
-        <label class="field">E-posta<input id="email" type="email" autocomplete="username" value="guvendeapp@gmail.com"></label>
+        <label class="field">E-posta<input id="email" type="email" autocomplete="username"></label>
         <label class="field">Şifre<input id="password" type="password" autocomplete="current-password"></label>
         <button class="btn primary block" id="sign-in">Giriş yap</button>
         <p class="form-note" id="login-note" role="status"></p>
@@ -75,7 +75,8 @@
     </div>
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
+    <!-- supabase-js 2.45.4 (UMD), served from here; the hash is the one jsDelivr published. -->
+    <script src="vendor/supabase-2.45.4.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
     <script src="config.js"></script>
     <script src="templates.js"></script>
     <script src="admin.js"></script>

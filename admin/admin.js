@@ -22,7 +22,7 @@
     action: { report_approve: "Bildirim onaylandı", report_reject: "Bildirim reddedildi",
       report_owner_confirm: "Sahibi doğruladı", report_revoke: "Onay geri alındı", report_reopen: "Yeniden incelemeye alındı",
       alert_publish: "Uyarı yayınlandı", alert_withdraw: "Uyarı geri çekildi", alert_push: "Push gönderildi",
-      alert_update: "Uyarı düzenlendi", alert_draft_save: "Taslak kaydedildi", alert_draft_delete: "Taslak silindi" }
+      alert_update: "Uyarı düzenlendi", alert_draft_save: "Taslak kaydedildi", alert_draft_delete: "Taslak silindi", admin_login: "Yönetici girişi" }
   };
 
   // Static icon paths (24×24, stroke).
@@ -150,7 +150,8 @@
     return data;
   }
   var refusals = { not_pending: "Bu bildirim artık beklemede değil.", not_approved: "Bildirim onaylı değil.",
-    not_rejected: "Bildirim reddedilmiş değil.", not_found: "Kayıt bulunamadı.", invalid: "Bilgiler eksik ya da hatalı." };
+    not_rejected: "Bildirim reddedilmiş değil.", not_found: "Kayıt bulunamadı.", invalid: "Bilgiler eksik ya da hatalı.",
+    push_limit: "Son 24 saatte 2 push gönderildi; şimdilik push gönderilemez. Uyarıyı pushsuz yayınlayabilirsin." };
   async function act(body, success) {
     try {
       var r = await api(body);
@@ -184,6 +185,12 @@
         var field = el("label", "field", o.noteLabel || "Not");
         note = el("textarea"); note.maxLength = 500; note.rows = 3; field.append(note); body.append(field);
       }
+      // A required confirmation box (e.g. "security alert, not promotion").
+      var confirmBox = null;
+      if (o.confirm) {
+        var confirmLabel = el("label", "check"); confirmBox = el("input"); confirmBox.type = "checkbox";
+        confirmLabel.append(confirmBox, document.createTextNode(o.confirm)); body.append(confirmLabel);
+      }
       $("dialog-ok").textContent = o.ok || "Onayla";
       $("dialog-ok").className = "btn " + (o.danger ? "danger solid" : "primary");
       $("dialog").hidden = false;
@@ -192,6 +199,7 @@
       $("dialog-ok").onclick = function () {
         var text = note ? note.value.trim() : "";
         if (o.reasons && !picked) { $("dialog-note").textContent = "Bir sebep seç."; return; }
+        if (confirmBox && !confirmBox.checked) { $("dialog-note").textContent = "Göndermek için kutuyu işaretle."; return; }
         if ((o.note === "required" || picked === "other") && text.length < 3) { $("dialog-note").textContent = "Kısa bir açıklama yaz (en az 3 karakter)."; return; }
         done({ reason: picked, note: text });
       };
@@ -513,6 +521,7 @@
     } catch (e) { lists.replaceChildren(failed(e)); return; }
     if (state.view !== "alerts") return;
     state.pushReady = audience.pushReady; state.audience = audience.audience;
+    state.pushesLeft = typeof audience.pushesLeft === "number" ? audience.pushesLeft : 0;
     renderEditor(editorCard, previewCard);
     lists.replaceChildren();
     var active = alerts.filter(function (a) { return !a.withdrawnAt; }), withdrawn = alerts.filter(function (a) { return a.withdrawnAt; });
@@ -581,9 +590,13 @@
       input("Kaynak bağlantısı (https://)", "sourceURL", { maxLength: 500, type: "url", placeholder: "https://" }));
     card.append(row2);
     if (e.mode !== "edit") {
-      var push = el("label", "check"), box = el("input"); box.type = "checkbox"; box.checked = e.push; box.disabled = !state.pushReady;
+      var canPush = state.pushReady && state.pushesLeft > 0;
+      if (!canPush) e.push = false;
+      var push = el("label", "check"), box = el("input"); box.type = "checkbox"; box.checked = e.push; box.disabled = !canPush;
       box.onchange = function () { e.push = box.checked; };
-      push.append(box, document.createTextNode(state.pushReady ? "Push bildirimi olarak da gönder" : "Push gönderilemez (APNs anahtarı yok)"));
+      push.append(box, document.createTextNode(!state.pushReady ? "Push gönderilemez (APNs anahtarı yok)"
+        : state.pushesLeft > 0 ? "Push bildirimi olarak da gönder (son 24 saatte kalan: " + state.pushesLeft + "/2)"
+        : "Push gönderilemez: son 24 saatte 2 push gönderildi"));
       card.append(push);
     }
     var note = el("p", "form-note");
@@ -647,10 +660,11 @@
     if (e.push) {
       var a = state.audience || { production: 0, sandbox: 0 };
       var second = await dialog({ title: "Push bildirimi gönder", danger: true, ok: "Gönder ve yayınla",
+        confirm: "Bu bir güvenlik uyarısıdır, tanıtım içermez.",
         text: (a.production + a.sandbox) + " cihaza bildirim gidecek (canlı: " + a.production + ", test: " + a.sandbox + "). Gönderilen bildirim geri alınamaz." });
       if (!second) return;
     }
-    var r = await act(Object.assign({ action: "publish", push: e.push, draftId: e.draftId }, d));
+    var r = await act(Object.assign({ action: "publish", push: e.push, securityOnly: e.push, draftId: e.draftId }, d));
     if (!r) return;
     var push = r.push;
     toast("Yayınlandı." + (push ? (push.status === "notConfigured" ? " Push gönderilemedi: APNs anahtarı yok." : " Push: " + push.sent + " başarılı, " + push.failed + " başarısız.") : ""));
