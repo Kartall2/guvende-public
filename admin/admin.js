@@ -24,7 +24,9 @@
       alert_publish: "Uyarı yayınlandı", alert_withdraw: "Uyarı geri çekildi", alert_push: "Push gönderildi",
       alert_update: "Uyarı düzenlendi", alert_draft_save: "Taslak kaydedildi", alert_draft_delete: "Taslak silindi", admin_login: "Yönetici girişi",
       registry_create: "Resmî numara eklendi", registry_reverify: "Resmî numara yeniden doğrulandı",
-      registry_disable: "Resmî numara devre dışı bırakıldı" },
+      registry_disable: "Resmî numara devre dışı bırakıldı",
+      domain_registry_create: "Resmî alan adı eklendi", domain_registry_reverify: "Resmî alan adı yeniden doğrulandı",
+      domain_registry_disable: "Resmî alan adı devre dışı bırakıldı" },
     registryStatus: { active: "Aktif", needs_review: "İncelenmeli", inactive: "Devre dışı", superseded: "Birleştirildi" },
     registryLine: { shared: "Ortak numara", operatorOnly: "Operatör hattı" }
   };
@@ -33,6 +35,7 @@
   var ICONS = {
     summary: '<path d="M4 13h4v7H4zM10 9h4v11h-4zM16 4h4v16h-4z"/>',
     registry: '<path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/>',
+    domains: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9S9.5 5.5 12 3z"/>',
     reports: '<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>',
     alerts: '<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
     audit: '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h7"/>',
@@ -260,6 +263,7 @@
     { id: "reports", label: "Bildirimler", icon: "reports", sub: "Kullanıcı bildirimlerini incele" },
     { id: "alerts", label: "Uyarılar", icon: "alerts", sub: "Uygulamadaki uyarılar ve push bildirimleri" },
     { id: "registry", label: "Resmî numaralar", icon: "registry", sub: "Kurumların resmî numaraları; incelenmesi gerekenler üstte" },
+    { id: "domains", label: "Resmî alan adları", icon: "domains", sub: "Kurumların resmî siteleri; incelenmesi gerekenler üstte" },
     { id: "audit", label: "Kayıtlar", icon: "audit", sub: "Yönetici işlemlerinin denetim kaydı" }
   ];
   var state = { view: "summary", reportTab: "pending", pending: 0, auditFilter: "", editor: null, pushReady: false };
@@ -283,7 +287,7 @@
     state.view = v.id; history.replaceState(null, "", "#" + v.id);
     $("view-title").textContent = v.label; $("view-sub").textContent = v.sub;
     buildNav();
-    ({ summary: viewSummary, reports: viewReports, alerts: viewAlerts, registry: viewRegistry, audit: viewAudit })[v.id]();
+    ({ summary: viewSummary, reports: viewReports, alerts: viewAlerts, registry: viewRegistry, domains: viewDomains, audit: viewAudit })[v.id]();
   }
   function content() { var c = $("content"); c.replaceChildren(); return c; }
 
@@ -842,10 +846,118 @@
     return row;
   }
 
+  // ---------- Resmî alan adları ----------
+  var domainRefusals = Object.assign({}, registryRefusals, {
+    invalid_domain: "Alan adı tanınmadı (ör. akbank.com; Türkçe karakterli adlar xn-- biçiminde).",
+    duplicate: "Bu alan adı bu kaynakla zaten kayıtlı." });
+  async function domainAct(body, success) {
+    try {
+      var r = await api(body);
+      if (r.ok === false) { toast(domainRefusals[r.result] || "İşlem yapılamadı."); return null; }
+      if (success) toast(success);
+      return r;
+    } catch (e) {
+      toast(e.message === "Yetki yok" ? "Bu hesabın yönetici yetkisi yok." : (domainRefusals[e.message] || "İşlem yapılamadı."));
+      return null;
+    }
+  }
+  function viewDomains() {
+    var c = content();
+    var bar = el("div", "search"), q = el("input");
+    q.type = "search"; q.placeholder = "Kurum, alan adı veya etiket ara"; q.maxLength = 80; q.value = state.domainQuery || "";
+    var create = button("Yeni kayıt", "primary small", function () { form.hidden = !form.hidden; if (!form.hidden) fields.institution.focus(); });
+    add(bar, q, create);
+    var form = el("div", "card"); form.hidden = true;
+    var fields = {};
+    [["institution", "Kurum", "text", 120, true], ["category", "Kategori", "text", 60, true],
+      ["domain", "Alan adı (ör. akbank.com)", "text", 253, true], ["label", "Etiket", "text", 120, true],
+      ["brandLabel", "Marka etiketi (taklit kontrolü; boş bırakılırsa kontrol yapılmaz)", "text", 63, false],
+      ["sourceUrl", "Kaynak URL (kurumun resmî sayfası, https)", "url", 2048, true]].forEach(function (f) {
+      var label = el("label", "field", f[1]), input = el("input");
+      input.type = f[2]; input.maxLength = f[3]; input.required = f[4];
+      if (f[0] === "sourceUrl") input.placeholder = "https://";
+      fields[f[0]] = input; label.append(input); form.append(label);
+    });
+    var scopeLabel = el("label", "field", "Kapsam"), scope = el("select");
+    scope.append(new Option("Alan adı ve alt alan adları", "subdomains"), new Option("Yalnız bu alan adı", "exact"));
+    scopeLabel.append(scope); form.append(scopeLabel);
+    var formNote = el("p", "muted");
+    add(form, formNote, el("div", "actions"));
+    form.lastChild.append(button("Kaydet", "primary", async function () {
+      var v = {}; Object.keys(fields).forEach(function (k) { v[k] = fields[k].value.trim(); });
+      if (!v.institution || !v.category || !v.domain || !v.label) { formNote.textContent = "Zorunlu alanları doldur."; return; }
+      if (!isHttpsSource(v.sourceUrl)) { formNote.textContent = domainRefusals.invalid_source; return; }
+      var r = await domainAct({ action: "domainRegistryCreate", institution: v.institution, category: v.category,
+        domain: v.domain, label: v.label, brandLabel: v.brandLabel, sourceUrl: v.sourceUrl, matchScope: scope.value }, "Kayıt eklendi.");
+      if (r) { state.domainQuery = v.domain; viewDomains(); }
+    }), button("Vazgeç", "ghost", function () { form.hidden = true; }));
+    var card = el("div", "card");
+    add(c, bar, form, card);
+    var timer = null;
+    q.oninput = function () { clearTimeout(timer); timer = setTimeout(function () { state.domainQuery = q.value.trim(); load(); }, 300); };
+    var load = async function () {
+      card.replaceChildren(skeleton("list"));
+      var data;
+      try { data = await api({ action: "domainRegistry", query: state.domainQuery || "" }); }
+      catch (e) { card.replaceChildren(failed(e)); return; }
+      var rows = data.rows || [];
+      card.replaceChildren();
+      if (!rows.length) { card.append(empty("domains", "Kayıt yok", "Aramaya uyan resmî alan adı bulunamadı.")); return; }
+      var review = rows.filter(function (r) { return r.status === "needs_review"; }).length;
+      if (review) card.append(banner("warn", review + " kayıt incelenmeli: kaynak sayfada alan adı bulunamadı ya da sayfa açılmadı. 14 gün içinde doğrulanmazsa devre dışı kalır."));
+      card.append(el("p", "muted", "Kamu alan adları (.gov.tr, .edu.tr, .bel.tr, .pol.tr, .tsk.tr, .k12.tr) listede olmadan resmî sayılır."));
+      rows.forEach(function (r) { card.append(domainRow(r, load)); });
+    };
+    load();
+  }
+  function domainRow(r, reload) {
+    var row = el("div", "list-row"), top = el("div", "row-top"), left = el("div");
+    add(left, el("div", "value", r.domain + " · " + r.institution),
+      el("div", "muted", [r.label, r.category, r.groupLabel ? "Grup: " + r.groupLabel : null,
+        r.matchScope === "exact" ? "Yalnız bu alan adı" : "Alt alan adları dahil",
+        r.brandLabel ? "Taklit kontrolü: " + r.brandLabel : "Taklit kontrolü yok"].filter(Boolean).join(" · ")));
+    var badges = el("div", "actions");
+    badges.append(badge(L.registryStatus[r.status] || r.status, r.status === "active" ? "green" : r.status === "needs_review" ? "warn" : "risk"));
+    add(top, left, badges);
+    var meta = el("div", "muted");
+    add(meta, document.createTextNode("Kaynak: "), sourceLink(r.sourceUrl),
+      document.createTextNode(" · Doğrulandı: " + day(r.verifiedAt) + " · Son kontrol: " + (r.lastCheckedAt ? day(r.lastCheckedAt) : "—") +
+        (r.needsReviewSince ? " · İncelemede: " + day(r.needsReviewSince) : "")));
+    var check = null;
+    if (r.fetchFailures > 0 || r.lastCheckError) {
+      var errorText = { domainNotFound: "sayfada alan adı yok", timeout: "zaman aşımı", network: "bağlantı hatası", not_https: "https değil" };
+      var err = r.lastCheckError ? (errorText[r.lastCheckError] || r.lastCheckError.replace(/^http_/, "HTTP ")) : null;
+      check = el("div", r.fetchFailures >= 2 ? "banner warn" : "muted",
+        (r.fetchFailures > 0 ? "Sayfa açılmadı: " + r.fetchFailures + " kez üst üste (3'te incelemeye düşer)" : "Son kontrol") +
+        (err ? " · Son hata: " + err : "") + (r.lastCheckAttemptAt ? " · " + day(r.lastCheckAttemptAt) : ""));
+    }
+    if (r.status === "superseded") {
+      add(row, top, meta, el("div", "muted", "Aynı alan adı ve kurum için daha yeni bir kayıt var; bu satır kullanılmaz ve aylık kontrolde atlanır."));
+      return row;
+    }
+    var actions = el("div", "actions");
+    actions.append(button("Yeniden doğrula", "ghost small", async function () {
+      var answer = await dialog({ title: "Yeniden doğrula", value: r.domain + " · " + r.institution,
+        text: "Kaynak sayfayı açıp alan adını kendin gördüysen doğrula. Doğrulama tarihi bugüne güncellenir ve kayıt aktif olur.",
+        ok: "Doğrula" });
+      if (answer && await domainAct({ action: "domainRegistryReverify", id: r.id }, "Kayıt yeniden doğrulandı.")) reload();
+    }, "refresh"));
+    if (r.status !== "inactive") {
+      actions.append(button("Devre dışı bırak", "danger small", async function () {
+        var answer = await dialog({ title: "Devre dışı bırak", value: r.domain + " · " + r.institution,
+          text: "Site uygulamada artık tanınmış site olarak gösterilmez ve taklit kontrolünde kullanılmaz.", note: "optional",
+          noteLabel: "Not (isteğe bağlı)", ok: "Devre dışı bırak", danger: true });
+        if (answer && await domainAct({ action: "domainRegistryDisable", id: r.id, note: answer.note }, "Kayıt devre dışı bırakıldı.")) reload();
+      }));
+    }
+    add(row, top, meta, check, actions);
+    return row;
+  }
+
   function viewAudit() {
     var c = content();
     var bar = el("div", "search"), sel = el("select");
-    [["", "Tüm işlemler"], ["report", "Bildirim işlemleri"], ["alert", "Uyarı işlemleri"], ["registry", "Resmî numara işlemleri"]].concat(
+    [["", "Tüm işlemler"], ["report", "Bildirim işlemleri"], ["alert", "Uyarı işlemleri"], ["registry", "Resmî numara işlemleri"], ["domain_registry", "Resmî alan adı işlemleri"]].concat(
       Object.keys(L.action).map(function (k) { return [k, L.action[k]]; })).forEach(function (o) { sel.append(new Option(o[1], o[0])); });
     sel.value = state.auditFilter;
     sel.onchange = function () { state.auditFilter = sel.value; viewAudit(); };
@@ -888,6 +1000,7 @@
       var tpl = templates.find(function (t) { return t.id === d.template; });
       parts.push("Şablon: " + (tpl ? tpl.label : d.template));
     }
+    if (d.domain) parts.push("Alan adı: " + d.domain);
     if (x.targetId) parts.push("Kayıt: " + String(x.targetId).slice(0, 8));
     return parts.join(" · ") || "—";
   }
