@@ -800,6 +800,7 @@
     var row = el("div", "list-row"), top = el("div", "row-top"), left = el("div");
     add(left, el("div", "value", r.number + " · " + r.institution),
       el("div", "muted", [r.label, r.category, r.sharedLabel ? "Genel ad: " + r.sharedLabel : null,
+        r.groupLabel ? "Ortak gösterim: " + r.groupLabel : null,
         r.operator ? "Yalnız " + r.operator + " hattından" : null].filter(Boolean).join(" · ")));
     var badges = el("div", "actions");
     badges.append(badge(L.registryStatus[r.status] || r.status, r.status === "active" ? "green" : r.status === "needs_review" ? "warn" : "risk"));
@@ -809,6 +810,14 @@
     add(meta, document.createTextNode("Kaynak: "), sourceLink(r.sourceUrl),
       document.createTextNode(" · Doğrulandı: " + day(r.verifiedAt) + " · Son kontrol: " + (r.lastCheckedAt ? day(r.lastCheckedAt) : "—") +
         (r.needsReviewSince ? " · İncelemede: " + day(r.needsReviewSince) : "")));
+    var check = null;
+    if (r.fetchFailures > 0 || r.lastCheckError) {
+      var errorText = { numberNotFound: "sayfada numara yok", timeout: "zaman aşımı", network: "bağlantı hatası", not_https: "https değil" };
+      var err = r.lastCheckError ? (errorText[r.lastCheckError] || r.lastCheckError.replace(/^http_/, "HTTP ")) : null;
+      check = el("div", r.fetchFailures >= 2 ? "banner warn" : "muted",
+        (r.fetchFailures > 0 ? "Sayfa açılmadı: " + r.fetchFailures + " kez üst üste (3'te incelemeye düşer)" : "Son kontrol") +
+        (err ? " · Son hata: " + err : "") + (r.lastCheckAttemptAt ? " · " + day(r.lastCheckAttemptAt) : ""));
+    }
     var actions = el("div", "actions");
     actions.append(button("Yeniden doğrula", "ghost small", async function () {
       var answer = await dialog({ title: "Yeniden doğrula", value: r.number + " · " + r.institution,
@@ -824,7 +833,7 @@
         if (answer && await registryAct({ action: "registryDisable", id: r.id, note: answer.note }, "Kayıt devre dışı bırakıldı.")) reload();
       }));
     }
-    add(row, top, meta, actions);
+    add(row, top, meta, check, actions);
     return row;
   }
 
