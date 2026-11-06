@@ -25,7 +25,7 @@
       alert_update: "Uyarı düzenlendi", alert_draft_save: "Taslak kaydedildi", alert_draft_delete: "Taslak silindi", admin_login: "Yönetici girişi",
       registry_create: "Resmî numara eklendi", registry_reverify: "Resmî numara yeniden doğrulandı",
       registry_disable: "Resmî numara devre dışı bırakıldı" },
-    registryStatus: { active: "Aktif", needs_review: "İncelenmeli", inactive: "Devre dışı" },
+    registryStatus: { active: "Aktif", needs_review: "İncelenmeli", inactive: "Devre dışı", superseded: "Birleştirildi" },
     registryLine: { shared: "Ortak numara", operatorOnly: "Operatör hattı" }
   };
 
@@ -732,7 +732,8 @@
   // ---------- Resmî numaralar ----------
   var registryRefusals = { invalid_number: "Numara tanınmadı (444, 0850, 0800, 0888, sabit hat, cep veya 3–4 haneli kısa kod).",
     invalid_source: "Kaynak, kurumun https ile başlayan resmî sayfası olmalı.", duplicate: "Bu numara bu kaynakla zaten kayıtlı.",
-    not_found: "Kayıt bulunamadı.", invalid: "Bilgiler eksik ya da hatalı." };
+    not_found: "Kayıt bulunamadı.", invalid: "Bilgiler eksik ya da hatalı.",
+    superseded: "Bu kayıt daha yeni bir kayıtla birleştirildi; yeni kaydı kullan." };
   async function registryAct(body, success) {
     try {
       var r = await api(body);
@@ -819,6 +820,10 @@
         (err ? " · Son hata: " + err : "") + (r.lastCheckAttemptAt ? " · " + day(r.lastCheckAttemptAt) : ""));
     }
     var actions = el("div", "actions");
+    if (r.status === "superseded") {
+      add(row, top, meta, el("div", "muted", "Aynı numara ve kurum için daha yeni bir kayıt var; bu satır kullanıcıya dönmez ve aylık kontrolde atlanır."));
+      return row;
+    }
     actions.append(button("Yeniden doğrula", "ghost small", async function () {
       var answer = await dialog({ title: "Yeniden doğrula", value: r.number + " · " + r.institution,
         text: "Kaynak sayfayı açıp numarayı kendin gördüysen doğrula. Doğrulama tarihi bugüne güncellenir ve kayıt aktif olur.",
