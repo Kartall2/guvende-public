@@ -22,12 +22,17 @@
     action: { report_approve: "Bildirim onaylandı", report_reject: "Bildirim reddedildi",
       report_owner_confirm: "Sahibi doğruladı", report_revoke: "Onay geri alındı", report_reopen: "Yeniden incelemeye alındı",
       alert_publish: "Uyarı yayınlandı", alert_withdraw: "Uyarı geri çekildi", alert_push: "Push gönderildi",
-      alert_update: "Uyarı düzenlendi", alert_draft_save: "Taslak kaydedildi", alert_draft_delete: "Taslak silindi", admin_login: "Yönetici girişi" }
+      alert_update: "Uyarı düzenlendi", alert_draft_save: "Taslak kaydedildi", alert_draft_delete: "Taslak silindi", admin_login: "Yönetici girişi",
+      registry_create: "Resmî numara eklendi", registry_reverify: "Resmî numara yeniden doğrulandı",
+      registry_disable: "Resmî numara devre dışı bırakıldı" },
+    registryStatus: { active: "Aktif", needs_review: "İncelenmeli", inactive: "Devre dışı" },
+    registryLine: { shared: "Ortak numara", operatorOnly: "Operatör hattı" }
   };
 
   // Static icon paths (24×24, stroke).
   var ICONS = {
     summary: '<path d="M4 13h4v7H4zM10 9h4v11h-4zM16 4h4v16h-4z"/>',
+    registry: '<path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/>',
     reports: '<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>',
     alerts: '<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
     audit: '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h7"/>',
@@ -254,6 +259,7 @@
     { id: "summary", label: "Özet", icon: "summary", sub: "Son 7 günün durumu" },
     { id: "reports", label: "Bildirimler", icon: "reports", sub: "Kullanıcı bildirimlerini incele" },
     { id: "alerts", label: "Uyarılar", icon: "alerts", sub: "Uygulamadaki uyarılar ve push bildirimleri" },
+    { id: "registry", label: "Resmî numaralar", icon: "registry", sub: "Kurumların resmî numaraları; incelenmesi gerekenler üstte" },
     { id: "audit", label: "Kayıtlar", icon: "audit", sub: "Yönetici işlemlerinin denetim kaydı" }
   ];
   var state = { view: "summary", reportTab: "pending", pending: 0, auditFilter: "", editor: null, pushReady: false };
@@ -277,7 +283,7 @@
     state.view = v.id; history.replaceState(null, "", "#" + v.id);
     $("view-title").textContent = v.label; $("view-sub").textContent = v.sub;
     buildNav();
-    ({ summary: viewSummary, reports: viewReports, alerts: viewAlerts, audit: viewAudit })[v.id]();
+    ({ summary: viewSummary, reports: viewReports, alerts: viewAlerts, registry: viewRegistry, audit: viewAudit })[v.id]();
   }
   function content() { var c = $("content"); c.replaceChildren(); return c; }
 
@@ -723,10 +729,109 @@
   }
 
   // ---------- Kayıtlar ----------
+  // ---------- Resmî numaralar ----------
+  var registryRefusals = { invalid_number: "Numara tanınmadı (444, 0850, 0800, 0888, sabit hat, cep veya 3–4 haneli kısa kod).",
+    invalid_source: "Kaynak, kurumun https ile başlayan resmî sayfası olmalı.", duplicate: "Bu numara bu kaynakla zaten kayıtlı.",
+    not_found: "Kayıt bulunamadı.", invalid: "Bilgiler eksik ya da hatalı." };
+  async function registryAct(body, success) {
+    try {
+      var r = await api(body);
+      if (r.ok === false) { toast(registryRefusals[r.result] || "İşlem yapılamadı."); return null; }
+      if (success) toast(success);
+      return r;
+    } catch (e) {
+      toast(e.message === "Yetki yok" ? "Bu hesabın yönetici yetkisi yok." : (registryRefusals[e.message] || "İşlem yapılamadı."));
+      return null;
+    }
+  }
+  function isHttpsSource(value) {
+    try { var u = new URL(value); return u.protocol === "https:" && u.hostname.indexOf(".") > 0 && !u.username && !u.password; }
+    catch (e) { return false; }
+  }
+  function sourceLink(url) {
+    var host = ""; try { host = new URL(url).hostname; } catch (e) { host = url; }
+    if (!isHttpsSource(url)) return el("span", "muted", host);
+    var a = el("a", null, host); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; return a;
+  }
+  function viewRegistry() {
+    var c = content();
+    var bar = el("div", "search"), q = el("input");
+    q.type = "search"; q.placeholder = "Kurum, etiket veya numara ara"; q.maxLength = 80; q.value = state.registryQuery || "";
+    var create = button("Yeni kayıt", "primary small", function () { form.hidden = !form.hidden; if (!form.hidden) fields.institution.focus(); });
+    add(bar, q, create);
+    var form = el("div", "card"); form.hidden = true;
+    var fields = {};
+    [["institution", "Kurum", "text", 120], ["category", "Kategori", "text", 60], ["number", "Numara", "text", 40],
+      ["label", "Etiket", "text", 120], ["sourceUrl", "Kaynak URL (kurumun resmî sayfası, https)", "url", 2048]].forEach(function (f) {
+      var label = el("label", "field", f[1]), input = el("input");
+      input.type = f[2]; input.maxLength = f[3]; input.required = true;
+      if (f[0] === "sourceUrl") input.placeholder = "https://";
+      fields[f[0]] = input; label.append(input); form.append(label);
+    });
+    var formNote = el("p", "muted");
+    add(form, formNote, el("div", "actions"));
+    form.lastChild.append(button("Kaydet", "primary", async function () {
+      var v = {}; Object.keys(fields).forEach(function (k) { v[k] = fields[k].value.trim(); });
+      if (!v.institution || !v.category || !v.number || !v.label) { formNote.textContent = "Tüm alanları doldur."; return; }
+      if (!isHttpsSource(v.sourceUrl)) { formNote.textContent = registryRefusals.invalid_source; return; }
+      var r = await registryAct({ action: "registryCreate", institution: v.institution, category: v.category,
+        number: v.number, label: v.label, sourceUrl: v.sourceUrl }, "Kayıt eklendi.");
+      if (r) { state.registryQuery = v.number; viewRegistry(); }
+    }), button("Vazgeç", "ghost", function () { form.hidden = true; }));
+    var card = el("div", "card");
+    add(c, bar, form, card);
+    var timer = null;
+    q.oninput = function () { clearTimeout(timer); timer = setTimeout(function () { state.registryQuery = q.value.trim(); load(); }, 300); };
+    var load = async function () {
+      card.replaceChildren(skeleton("list"));
+      var data;
+      try { data = await api({ action: "registry", query: state.registryQuery || "" }); }
+      catch (e) { card.replaceChildren(failed(e)); return; }
+      var rows = data.rows || [];
+      card.replaceChildren();
+      if (!rows.length) { card.append(empty("registry", "Kayıt yok", "Aramaya uyan resmî numara bulunamadı.")); return; }
+      var review = rows.filter(function (r) { return r.status === "needs_review"; }).length;
+      if (review) card.append(banner("warn", review + " kayıt incelenmeli: kaynak sayfada numara bulunamadı ya da sayfa açılmadı. 14 gün içinde doğrulanmazsa devre dışı kalır."));
+      rows.forEach(function (r) { card.append(registryRow(r, load)); });
+    };
+    load();
+  }
+  function registryRow(r, reload) {
+    var row = el("div", "list-row"), top = el("div", "row-top"), left = el("div");
+    add(left, el("div", "value", r.number + " · " + r.institution),
+      el("div", "muted", [r.label, r.category, r.sharedLabel ? "Genel ad: " + r.sharedLabel : null,
+        r.operator ? "Yalnız " + r.operator + " hattından" : null].filter(Boolean).join(" · ")));
+    var badges = el("div", "actions");
+    badges.append(badge(L.registryStatus[r.status] || r.status, r.status === "active" ? "green" : r.status === "needs_review" ? "warn" : "risk"));
+    if (L.registryLine[r.lineKind]) badges.append(badge(L.registryLine[r.lineKind], "info"));
+    add(top, left, badges);
+    var meta = el("div", "muted");
+    add(meta, document.createTextNode("Kaynak: "), sourceLink(r.sourceUrl),
+      document.createTextNode(" · Doğrulandı: " + day(r.verifiedAt) + " · Son kontrol: " + (r.lastCheckedAt ? day(r.lastCheckedAt) : "—") +
+        (r.needsReviewSince ? " · İncelemede: " + day(r.needsReviewSince) : "")));
+    var actions = el("div", "actions");
+    actions.append(button("Yeniden doğrula", "ghost small", async function () {
+      var answer = await dialog({ title: "Yeniden doğrula", value: r.number + " · " + r.institution,
+        text: "Kaynak sayfayı açıp numarayı kendin gördüysen doğrula. Doğrulama tarihi bugüne güncellenir ve kayıt aktif olur.",
+        ok: "Doğrula" });
+      if (answer && await registryAct({ action: "registryReverify", id: r.id }, "Kayıt yeniden doğrulandı.")) reload();
+    }, "refresh"));
+    if (r.status !== "inactive") {
+      actions.append(button("Devre dışı bırak", "danger small", async function () {
+        var answer = await dialog({ title: "Devre dışı bırak", value: r.number + " · " + r.institution,
+          text: "Numara uygulamada artık resmî numara olarak gösterilmez.", note: "optional", noteLabel: "Not (isteğe bağlı)",
+          ok: "Devre dışı bırak", danger: true });
+        if (answer && await registryAct({ action: "registryDisable", id: r.id, note: answer.note }, "Kayıt devre dışı bırakıldı.")) reload();
+      }));
+    }
+    add(row, top, meta, actions);
+    return row;
+  }
+
   function viewAudit() {
     var c = content();
     var bar = el("div", "search"), sel = el("select");
-    [["", "Tüm işlemler"], ["report", "Bildirim işlemleri"], ["alert", "Uyarı işlemleri"]].concat(
+    [["", "Tüm işlemler"], ["report", "Bildirim işlemleri"], ["alert", "Uyarı işlemleri"], ["registry", "Resmî numara işlemleri"]].concat(
       Object.keys(L.action).map(function (k) { return [k, L.action[k]]; })).forEach(function (o) { sel.append(new Option(o[1], o[0])); });
     sel.value = state.auditFilter;
     sel.onchange = function () { state.auditFilter = sel.value; viewAudit(); };
