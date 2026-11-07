@@ -294,8 +294,11 @@
   // ---------- Özet ----------
   async function viewSummary() {
     var c = content(); c.append(skeleton("kpis"));
-    var data;
-    try { data = await api({ action: "summary" }); } catch (e) { c.replaceChildren(failed(e)); return; }
+    var data, users = null;
+    try {
+      var both = await Promise.all([api({ action: "summary" }), api({ action: "users" }).catch(function () { return null; })]);
+      data = both[0]; users = both[1] && both[1].users;
+    } catch (e) { c.replaceChildren(failed(e)); return; }
     if (state.view !== "summary") return;
     var s = data.summary; state.pending = s.pendingReports; state.pushReady = data.pushReady; buildNav();
     var grid = el("div", "grid kpis");
@@ -324,7 +327,12 @@
       kpi("Bekleyen bildirim", "reports", s.pendingReports, s.pendingValues + " farklı değer", function () { go("reports"); }),
       kpi("Aktif abone", "users", s.activeSubscribers, "Test aboneliği: " + s.activeSandboxSubscribers),
       kpi("Bildirim cihazı", "device", s.pushDevices, data.pushReady ? "Push hazır" : "APNs anahtarı yok"),
-      kpi("Aktif uyarı", "alerts", s.activeAlerts, s.drafts + " taslak", function () { go("alerts"); }));
+      kpi("Aktif uyarı", "alerts", s.activeAlerts, s.drafts + " taslak", function () { go("alerts"); }),
+      // Counts only; no user data.
+      kpi("Kullanıcılar", "users", users ? users.total : "—", users
+        ? "Apple ile giriş: " + users.apple + " · Misafir: " + users.guest +
+          (users.otherSignIn ? " · Diğer giriş: " + users.otherSignIn : "") + " · Son 7 gün yeni: " + users.newLast7Days
+        : "Yüklenemedi"));
     c.replaceChildren(grid);
   }
   function failed(e) {
@@ -758,6 +766,34 @@
     if (!isHttpsSource(url)) return el("span", "muted", host);
     var a = el("a", null, host); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; return a;
   }
+  // "Yeniden doğrula": the server opens the source page first (same check as
+  // the monthly run). Found → active. Not found or not opened → nothing
+  // changes; "Yine de elle doğrula" needs a note and is logged as manual.
+  var checkErrors = { timeout: "zaman aşımı", network: "bağlantı hatası", not_https: "kaynak https değil" };
+  async function reverifyFlow(action, id, value, what, refusals, reload) {
+    var first = await dialog({ title: "Yeniden doğrula", value: value,
+      text: "Kaynak sayfa şimdi açılıp " + what + " aranacak. Sayfada bulunursa kayıt aktif olur ve doğrulama tarihi bugüne güncellenir.",
+      ok: "Sayfayı kontrol et" });
+    if (!first) return;
+    var r;
+    try { r = await api({ action: action, id: id }); }
+    catch (e) { toast(e.message === "Yetki yok" ? "Bu hesabın yönetici yetkisi yok." : (refusals[e.message] || "İşlem yapılamadı.")); return; }
+    if (r.ok) { toast("Sayfada bulundu; kayıt doğrulandı."); reload(); return; }
+    if (r.result !== "check_failed") { toast(refusals[r.result] || "İşlem yapılamadı."); return; }
+    var c = r.check || {};
+    var why = c.outcome === "notFound"
+      ? "Kaynak sayfa açıldı ama " + what + " sayfada bulunamadı."
+      : "Kaynak sayfa açılmadı (" + (checkErrors[c.error] || String(c.error || "bilinmeyen hata").replace(/^http_/, "HTTP ")) + ").";
+    var second = await dialog({ title: "Sayfa kontrolü başarısız", value: value,
+      text: why + " Kayıt değiştirilmedi. Sayfayı kendin açıp " + what + " gördüysen elle doğrulayabilirsin; bu işlem kayda “elle, sayfa kontrolü başarısız” olarak yazılır.",
+      note: "required", noteLabel: "Not (zorunlu): nerede ve nasıl gördün?", ok: "Yine de elle doğrula" });
+    if (!second) return;
+    try {
+      var m = await api({ action: action, id: id, manual: true, note: second.note });
+      if (m.ok) { toast("Elle doğrulandı."); reload(); } else toast(refusals[m.result] || "İşlem yapılamadı.");
+    } catch (e) { toast(refusals[e.message] || "İşlem yapılamadı."); }
+  }
+
   function viewRegistry() {
     var c = content();
     var bar = el("div", "search"), q = el("input");
@@ -828,11 +864,8 @@
       add(row, top, meta, el("div", "muted", "Aynı numara ve kurum için daha yeni bir kayıt var; bu satır kullanıcıya dönmez ve aylık kontrolde atlanır."));
       return row;
     }
-    actions.append(button("Yeniden doğrula", "ghost small", async function () {
-      var answer = await dialog({ title: "Yeniden doğrula", value: r.number + " · " + r.institution,
-        text: "Kaynak sayfayı açıp numarayı kendin gördüysen doğrula. Doğrulama tarihi bugüne güncellenir ve kayıt aktif olur.",
-        ok: "Doğrula" });
-      if (answer && await registryAct({ action: "registryReverify", id: r.id }, "Kayıt yeniden doğrulandı.")) reload();
+    actions.append(button("Yeniden doğrula", "ghost small", function () {
+      reverifyFlow("registryReverify", r.id, r.number + " · " + r.institution, "numara", registryRefusals, reload);
     }, "refresh"));
     if (r.status !== "inactive") {
       actions.append(button("Devre dışı bırak", "danger small", async function () {
@@ -936,11 +969,8 @@
       return row;
     }
     var actions = el("div", "actions");
-    actions.append(button("Yeniden doğrula", "ghost small", async function () {
-      var answer = await dialog({ title: "Yeniden doğrula", value: r.domain + " · " + r.institution,
-        text: "Kaynak sayfayı açıp alan adını kendin gördüysen doğrula. Doğrulama tarihi bugüne güncellenir ve kayıt aktif olur.",
-        ok: "Doğrula" });
-      if (answer && await domainAct({ action: "domainRegistryReverify", id: r.id }, "Kayıt yeniden doğrulandı.")) reload();
+    actions.append(button("Yeniden doğrula", "ghost small", function () {
+      reverifyFlow("domainRegistryReverify", r.id, r.domain + " · " + r.institution, "alan adı", domainRefusals, reload);
     }, "refresh"));
     if (r.status !== "inactive") {
       actions.append(button("Devre dışı bırak", "danger small", async function () {
@@ -1001,6 +1031,8 @@
       parts.push("Şablon: " + (tpl ? tpl.label : d.template));
     }
     if (d.domain) parts.push("Alan adı: " + d.domain);
+    if (d.check === "found") parts.push("Sayfada bulundu");
+    if (d.check === "manual") parts.push("Elle, sayfa kontrolü başarısız");
     if (x.targetId) parts.push("Kayıt: " + String(x.targetId).slice(0, 8));
     return parts.join(" · ") || "—";
   }
