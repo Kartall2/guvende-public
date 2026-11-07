@@ -26,7 +26,8 @@
       registry_create: "Resmî numara eklendi", registry_reverify: "Resmî numara yeniden doğrulandı",
       registry_disable: "Resmî numara devre dışı bırakıldı",
       domain_registry_create: "Resmî alan adı eklendi", domain_registry_reverify: "Resmî alan adı yeniden doğrulandı",
-      domain_registry_disable: "Resmî alan adı devre dışı bırakıldı" },
+      domain_registry_disable: "Resmî alan adı devre dışı bırakıldı",
+      version_policy_update: "Sürüm ayarı değiştirildi" },
     registryStatus: { active: "Aktif", needs_review: "İncelenmeli", inactive: "Devre dışı", superseded: "Birleştirildi" },
     registryLine: { shared: "Ortak numara", operatorOnly: "Operatör hattı" }
   };
@@ -35,6 +36,7 @@
   var ICONS = {
     summary: '<path d="M4 13h4v7H4zM10 9h4v11h-4zM16 4h4v16h-4z"/>',
     registry: '<path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/>',
+    update: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 19h14"/>',
     domains: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9S9.5 5.5 12 3z"/>',
     reports: '<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>',
     alerts: '<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
@@ -264,6 +266,7 @@
     { id: "alerts", label: "Uyarılar", icon: "alerts", sub: "Uygulamadaki uyarılar ve push bildirimleri" },
     { id: "registry", label: "Resmî numaralar", icon: "registry", sub: "Kurumların resmî numaraları; incelenmesi gerekenler üstte" },
     { id: "domains", label: "Resmî alan adları", icon: "domains", sub: "Kurumların resmî siteleri; incelenmesi gerekenler üstte" },
+    { id: "update", label: "Güncelleme", icon: "update", sub: "Uygulamanın güncelleme ekranı (1.0.2 ve sonrası)" },
     { id: "audit", label: "Kayıtlar", icon: "audit", sub: "Yönetici işlemlerinin denetim kaydı" }
   ];
   var state = { view: "summary", reportTab: "pending", pending: 0, auditFilter: "", editor: null, pushReady: false };
@@ -287,7 +290,8 @@
     state.view = v.id; history.replaceState(null, "", "#" + v.id);
     $("view-title").textContent = v.label; $("view-sub").textContent = v.sub;
     buildNav();
-    ({ summary: viewSummary, reports: viewReports, alerts: viewAlerts, registry: viewRegistry, domains: viewDomains, audit: viewAudit })[v.id]();
+    ({ summary: viewSummary, reports: viewReports, alerts: viewAlerts, registry: viewRegistry, domains: viewDomains,
+      update: viewUpdate, audit: viewAudit })[v.id]();
   }
   function content() { var c = $("content"); c.replaceChildren(); return c; }
 
@@ -877,6 +881,76 @@
     }
     add(row, top, meta, check, actions);
     return row;
+  }
+
+  // ---------- Güncelleme (1.0.2, panolar 16–18) ----------
+  var versionRefusals = { invalidVersion: "Sürüm 1.0.3 biçiminde olmalı.", recommendedBelowMin: "Önerilen sürüm en düşük sürümden küçük olamaz.",
+    invalidWhatsNew: "Yenilikler en fazla 5 madde, her biri 2–80 karakter olmalı." };
+  var versionPattern = /^[0-9]{1,3}\.[0-9]{1,3}(\.[0-9]{1,3})?$/;
+  function compareVersions(a, b) {
+    var x = (a + ".0.0").split(".").slice(0, 3).map(Number), y = (b + ".0.0").split(".").slice(0, 3).map(Number);
+    for (var i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1;
+    return 0;
+  }
+  function viewUpdate() {
+    var c = content();
+    var rules = el("div", "card");
+    add(rules, el("p", "muted", "En düşük sürümün altındaki uygulamalar zorunlu güncelleme ekranını görür ve güncellemeden kullanılamaz. " +
+      "Önerilen sürümün altındakiler \u201cDaha sonra\u201d seçenekli ekranı görür (3 gün tekrar sorulmaz). İnternet yoksa ya da ayar okunamazsa " +
+      "uygulama engellenmez. Bu ekran 1.0.2 ile gelir; 1.0 ve 1.0.1'de çalışmaz."));
+    var card = el("div", "card");
+    add(c, rules, card);
+    card.replaceChildren(skeleton("list"));
+    (async function () {
+      var data;
+      try { data = await api({ action: "versionPolicy" }); }
+      catch (e) { card.replaceChildren(failed(e)); return; }
+      var policy = data.policy || { minVersion: "1.0", recommendedVersion: "1.0", whatsNew: [] };
+      var live = data.appStoreVersion;
+      card.replaceChildren();
+      var fields = {};
+      [["minVersion", "En düşük sürüm (altındaysa zorunlu)"], ["recommendedVersion", "Önerilen sürüm (altındaysa nazik)"]].forEach(function (f) {
+        var label = el("label", "field", f[1]), input = el("input");
+        input.type = "text"; input.maxLength = 11; input.inputMode = "decimal"; input.value = policy[f[0]];
+        fields[f[0]] = input; label.append(input); card.append(label);
+      });
+      var notesLabel = el("label", "field", "Yenilikler (her satır bir madde; en fazla 5, boşsa kutu gizlenir)"), notes = el("textarea");
+      notes.rows = 5; notes.maxLength = 5 * 81; notes.value = (policy.whatsNew || []).join("\n");
+      notesLabel.append(notes); card.append(notesLabel);
+      add(card, el("p", "muted", "App Store'daki sürüm: " + (live || "okunamadı") +
+        (policy.updatedAt ? " · Son değişiklik: " + new Date(policy.updatedAt).toLocaleString("tr-TR") : "")));
+      var note = el("p", "muted"); card.append(note);
+      var actions = el("div", "actions"); card.append(actions);
+      actions.append(button("Kaydet", "primary", async function () {
+        var min = fields.minVersion.value.trim(), rec = fields.recommendedVersion.value.trim();
+        var lines = notes.value.split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
+        if (!versionPattern.test(min) || !versionPattern.test(rec)) { note.textContent = versionRefusals.invalidVersion; return; }
+        if (compareVersions(rec, min) < 0) { note.textContent = versionRefusals.recommendedBelowMin; return; }
+        if (lines.length > 5 || lines.some(function (l) { return l.length < 2 || l.length > 80; })) { note.textContent = versionRefusals.invalidWhatsNew; return; }
+        note.textContent = "";
+        if (live && (compareVersions(rec, live) > 0 || compareVersions(min, live) > 0)) {
+          var notLive = await dialog({ title: "Bu sürüm App Store'da henüz görünmüyor",
+            text: "App Store'daki sürüm " + live + ". Apple yeni sürümü birkaç saat gecikmeyle gösterebilir; bu sürede ekran, indirilemeyen bir sürümü önerir.",
+            ok: "Yine de kaydet" });
+          if (!notLive) return;
+        }
+        var raise = compareVersions(min, policy.minVersion) > 0;
+        if (raise) {
+          var sure = await dialog({ title: "En düşük sürümü yükselt", danger: true, ok: "Yükselt",
+            text: "Bu sürümün altındaki herkes uygulamayı güncellemeden kullanamaz.",
+            value: policy.minVersion + " → " + min, confirm: "Zorunlu güncellemeyi anladım ve onaylıyorum." });
+          if (!sure) return;
+        }
+        try {
+          var r = await api({ action: "versionPolicySave", minVersion: min, recommendedVersion: rec, whatsNew: lines, confirmMinRaise: raise });
+          if (r.ok === false) { note.textContent = versionRefusals[r.result] || "Kaydedilemedi."; return; }
+          toast("Sürüm ayarı kaydedildi.");
+          viewUpdate();
+        } catch (e) {
+          note.textContent = versionRefusals[e.message] || (e.message === "Yetki yok" ? "Bu hesabın yönetici yetkisi yok." : "Kaydedilemedi.");
+        }
+      }));
+    })();
   }
 
   // ---------- Resmî alan adları ----------
