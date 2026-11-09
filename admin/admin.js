@@ -149,14 +149,50 @@
   }
 
   // ---------- API ----------
-  async function api(body) {
+  // admin-api accepts only a token that itself carries aal2. Right after the
+  // MFA step or a restored session, a call made in parallel could still send
+  // the older aal1 token and get a 403 (seen once on each Özet load). So a
+  // token without aal2 is refreshed before it is sent, and a 403 is retried
+  // once with a refreshed session; a second 403 is a real refusal.
+  function tokenAAL(token) {
+    try {
+      var part = String(token).split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      return JSON.parse(atob(part + "=".repeat((4 - part.length % 4) % 4))).aal || null;
+    } catch (e) { return null; }
+  }
+  var refreshing = null;
+  function refreshOnce() {
+    if (!refreshing) {
+      refreshing = client.auth.refreshSession().catch(function () { return null; })
+        .then(function (r) { refreshing = null; return r; });
+    }
+    return refreshing;
+  }
+  async function aal2Session() {
     var session = (await client.auth.getSession()).data.session;
-    if (!session) throw new Error("Oturum yok");
-    var response = await fetch(env.url + "/functions/v1/admin-api", {
+    if (session && tokenAAL(session.access_token) !== "aal2") {
+      await refreshOnce();
+      session = (await client.auth.getSession()).data.session;
+    }
+    return session;
+  }
+  function post(body, session) {
+    return fetch(env.url + "/functions/v1/admin-api", {
       method: "POST",
       headers: { "content-type": "application/json", apikey: env.publishableKey, authorization: "Bearer " + session.access_token },
       body: JSON.stringify(body)
     });
+  }
+  async function api(body) {
+    var session = await aal2Session();
+    if (!session) throw new Error("Oturum yok");
+    var response = await post(body, session);
+    if (response.status === 403) {
+      await refreshOnce();
+      session = (await client.auth.getSession()).data.session;
+      if (!session) throw new Error("Oturum yok");
+      response = await post(body, session);
+    }
     var data = await response.json().catch(function () { return {}; });
     if (response.status === 403) throw new Error("Yetki yok");
     if (!response.ok) throw new Error(data.result || "Hata");
@@ -229,11 +265,21 @@
     n.textContent = envName === "sandbox" ? (compact ? "Sandbox" : "Sandbox (test) ortamı") : (compact ? "Canlı" : "Canlı ortam");
     if (envName === "sandbox") n.classList.add("sandbox");
   });
-  async function route() {
+  // route() runs on load, after sign-in and MFA, and on every SIGNED_IN event
+  // (supabase-js also sends one when the tab comes back); overlapping calls
+  // share one run, and an open panel is not reloaded.
+  var routing = null;
+  function route() {
+    if (!routing) routing = routeNow().catch(function () {}).then(function () { routing = null; });
+    return routing;
+  }
+  async function routeNow() {
     var session = (await client.auth.getSession()).data.session;
     if (!session) return show("login");
     var aal = (await client.auth.mfa.getAuthenticatorAssuranceLevel()).data;
     if (!aal || aal.currentLevel !== "aal2") return startMFA();
+    if (tokenAAL(session.access_token) !== "aal2") await refreshOnce();
+    if (!$("panel").hidden) return;
     show("panel");
     go(location.hash.replace("#", "") || "summary");
   }
@@ -305,11 +351,12 @@
   // ---------- Özet ----------
   async function viewSummary() {
     var c = content(); c.append(skeleton("kpis"));
-    var data, users = null;
+    var data, users = null, usersError = null;
     try {
-      var both = await Promise.all([api({ action: "summary" }), api({ action: "users" }).catch(function () { return null; })]);
+      var both = await Promise.all([api({ action: "summary" }), api({ action: "users" }).catch(function (e) { usersError = e; return null; })]);
       data = both[0]; users = both[1] && both[1].users;
     } catch (e) { c.replaceChildren(failed(e)); return; }
+    if (!users && !usersError) usersError = new Error("Hata");
     if (state.view !== "summary") return;
     var s = data.summary; state.pending = s.pendingReports; state.pushReady = data.pushReady; buildNav();
     var grid = el("div", "grid kpis");
@@ -340,11 +387,20 @@
       kpi("Bildirim cihazı", "device", s.pushDevices, data.pushReady ? "Push hazır" : "APNs anahtarı yok"),
       kpi("Aktif uyarı", "alerts", s.activeAlerts, s.drafts + " taslak", function () { go("alerts"); }),
       // Counts only; no user data.
-      kpi("Kullanıcılar", "users", users ? users.total : "—", users
-        ? "Apple ile giriş: " + users.apple + " · Misafir: " + users.guest +
-          (users.otherSignIn ? " · Diğer giriş: " + users.otherSignIn : "") + " · Son 7 gün yeni: " + users.newLast7Days
-        : "Yüklenemedi"));
+      users
+        ? kpi("Kullanıcılar", "users", users.total, "Apple ile giriş: " + users.apple + " · Misafir: " + users.guest +
+            (users.otherSignIn ? " · Diğer giriş: " + users.otherSignIn : "") + " · Son 7 gün yeni: " + users.newLast7Days)
+        : usersFailed(kpi, usersError));
     c.replaceChildren(grid);
+  }
+  // The users count failing is shown, not hidden: the reason and a retry.
+  function usersFailed(kpi, e) {
+    var card = kpi("Kullanıcılar", "users", "—",
+      (e && e.message === "Yetki yok" ? "Yetki reddedildi." : "Sayılar alınamadı.") + " Tekrar denemek için tıkla.",
+      function () { go("summary"); });
+    card.classList.add("failed");
+    card.id = "summary-users-failed";
+    return card;
   }
   function failed(e) {
     return empty("warn", e.message === "Yetki yok" ? "Bu hesabın yönetici yetkisi yok." : "Yüklenemedi.", "Yenile düğmesiyle tekrar dene.");
