@@ -27,7 +27,8 @@
       registry_disable: "Resmî numara devre dışı bırakıldı",
       domain_registry_create: "Resmî alan adı eklendi", domain_registry_reverify: "Resmî alan adı yeniden doğrulandı",
       domain_registry_disable: "Resmî alan adı devre dışı bırakıldı",
-      version_policy_update: "Sürüm ayarı değiştirildi" },
+      version_policy_update: "Sürüm ayarı değiştirildi", support_answered: "Destek mesajı yanıtlandı" },
+    supportTopic: { bug: "Hata", confused: "Anlamadım", billing: "Abonelik / ödeme", idea: "Öneri" },
     registryStatus: { active: "Aktif", needs_review: "İncelenmeli", inactive: "Devre dışı", superseded: "Birleştirildi" },
     registryLine: { shared: "Ortak numara", operatorOnly: "Operatör hattı" }
   };
@@ -50,6 +51,8 @@
     users: '<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 4a3 3 0 0 1 0 6M21 20a6 6 0 0 0-4-5.6"/>',
     device: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
     inbox: '<path d="M3 13h5l1 3h6l1-3h5"/><path d="M5 5h14l2 8v6H3v-6z"/>',
+    support: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
     external: '<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>'
   };
   function icon(name) {
@@ -267,9 +270,11 @@
     { id: "registry", label: "Resmî numaralar", icon: "registry", sub: "Kurumların resmî numaraları; incelenmesi gerekenler üstte" },
     { id: "domains", label: "Resmî alan adları", icon: "domains", sub: "Kurumların resmî siteleri; incelenmesi gerekenler üstte" },
     { id: "update", label: "Güncelleme", icon: "update", sub: "Uygulamanın güncelleme ekranı (1.0.2 ve sonrası)" },
+    { id: "support", label: "Destek", icon: "support", sub: "Uygulamadaki \u201cBize yaz\u201d mesajları (1.0.3 ve sonrası)" },
     { id: "audit", label: "Kayıtlar", icon: "audit", sub: "Yönetici işlemlerinin denetim kaydı" }
   ];
-  var state = { view: "summary", reportTab: "pending", pending: 0, auditFilter: "", editor: null, pushReady: false };
+  var state = { view: "summary", reportTab: "pending", pending: 0, auditFilter: "", editor: null, pushReady: false,
+    supportNew: 0, supportStatus: "new", supportTopic: "", supportSelected: null };
   function buildNav() {
     [["nav", ""], ["tabbar", ""]].forEach(function (pair) {
       var host = $(pair[0]); host.replaceChildren();
@@ -277,6 +282,7 @@
         var b = el("button"); b.type = "button"; b.dataset.view = v.id;
         b.append(icon(v.icon), el("span", null, v.label));
         if (v.id === "reports" && state.pending > 0) b.append(el("span", "count", state.pending));
+        if (v.id === "support" && state.supportNew > 0) b.append(el("span", "count", state.supportNew));
         if (v.id === state.view) b.classList.add("active");
         b.onclick = function () { go(v.id); };
         host.append(b);
@@ -291,7 +297,8 @@
     $("view-title").textContent = v.label; $("view-sub").textContent = v.sub;
     buildNav();
     ({ summary: viewSummary, reports: viewReports, alerts: viewAlerts, registry: viewRegistry, domains: viewDomains,
-      update: viewUpdate, audit: viewAudit })[v.id]();
+      update: viewUpdate, support: viewSupport, audit: viewAudit })[v.id]();
+    refreshSupportBadge();
   }
   function content() { var c = $("content"); c.replaceChildren(); return c; }
 
@@ -881,6 +888,100 @@
     }
     add(row, top, meta, check, actions);
     return row;
+  }
+
+  // ---------- Destek (1.0.3 B2, tuval Panel-Destek) ----------
+  // The messages carry no checked number, link or IBAN; the app never adds them.
+  async function refreshSupportBadge() {
+    try {
+      var r = await api({ action: "supportNewCount" });
+      if (typeof r.newCount === "number" && r.newCount !== state.supportNew) { state.supportNew = r.newCount; buildNav(); }
+    } catch (e) { /* the badge simply stays as it was */ }
+  }
+  function supportReplyLink(m) {
+    var a = el("a", "btn primary");
+    var topic = L.supportTopic[m.topic] || m.topic;
+    a.href = "mailto:" + encodeURIComponent(m.replyEmail) + "?subject=" + encodeURIComponent("Re: Güvende destek \u2013 " + topic);
+    a.append(icon("mail"), document.createTextNode("E-postayla yanıtla"));
+    return a;
+  }
+  function viewSupport() {
+    var c = content();
+    var seg = el("div", "segments"), newCount = el("span", "count");
+    newCount.hidden = !(state.supportNew > 0); newCount.textContent = state.supportNew;
+    [["", "Tümü"], ["new", "Yeni"], ["answered", "Yanıtlandı"]].forEach(function (t) {
+      var b = el("button", t[0] === state.supportStatus ? "active" : "", t[1]); b.type = "button";
+      if (t[0] === "new") b.append(newCount);
+      b.onclick = function () { state.supportStatus = t[0]; state.supportSelected = null; viewSupport(); };
+      seg.append(b);
+    });
+    var topics = el("div", "templates");
+    [["", "Bütün konular"]].concat(Object.keys(L.supportTopic).map(function (k) { return [k, L.supportTopic[k]]; })).forEach(function (t) {
+      var chip = el("button", "chip" + (t[0] === state.supportTopic ? " active" : ""), t[1]); chip.type = "button";
+      chip.setAttribute("aria-pressed", t[0] === state.supportTopic ? "true" : "false");
+      chip.onclick = function () { state.supportTopic = t[0]; state.supportSelected = null; viewSupport(); };
+      topics.append(chip);
+    });
+    var layout = el("div", "grid two"), listCard = el("section", "card"), detailCard = el("section", "card");
+    listCard.setAttribute("aria-label", "Mesajlar"); detailCard.setAttribute("aria-label", "Mesaj ayrıntısı");
+    add(layout, listCard, detailCard);
+    add(c, seg, topics, layout);
+    listCard.append(skeleton("list"));
+    detailCard.append(empty("support", "Bir mesaj seç", "Ayrıntı ve yanıt burada görünür."));
+    (async function () {
+      var data;
+      try { data = await api({ action: "support", status: state.supportStatus, topic: state.supportTopic }); }
+      catch (e) { listCard.replaceChildren(failed(e)); return; }
+      if (state.view !== "support") return;
+      state.supportNew = data.newCount || 0; buildNav();
+      newCount.textContent = state.supportNew; newCount.hidden = !(state.supportNew > 0);
+      listCard.replaceChildren();
+      if (!data.messages.length) { listCard.append(empty("inbox", "Mesaj yok", "Bu filtrede mesaj bulunmuyor.")); return; }
+      data.messages.forEach(function (m) {
+        var row = el("button", "list-row support-row" + (m.id === state.supportSelected ? " selected" : "")); row.type = "button";
+        var top = el("div", "row-top");
+        add(top, el("strong", null, L.supportTopic[m.topic] || m.topic),
+          badge(m.status === "answered" ? "Yanıtlandı" : "Yeni", m.status === "answered" ? "" : "green"));
+        add(row, top, el("span", "support-preview", m.preview),
+          el("span", "muted small", when(m.createdAt) + " · " + (m.replyEmail || "Yanıt adresi yok")));
+        row.dataset.id = m.id;
+        row.onclick = function () { state.supportSelected = m.id; viewSupportDetail(detailCard, m.id, listCard); };
+        listCard.append(row);
+      });
+      if (state.supportSelected) viewSupportDetail(detailCard, state.supportSelected, listCard);
+    })();
+  }
+  async function viewSupportDetail(card, id, listCard) {
+    Array.prototype.forEach.call(listCard.querySelectorAll(".support-row"), function (r) {
+      r.classList.toggle("selected", r.dataset.id === id);
+    });
+    card.replaceChildren(skeleton("list"));
+    var data;
+    try { data = await api({ action: "supportDetail", id: id }); }
+    catch (e) { card.replaceChildren(failed(e)); return; }
+    var m = data.message;
+    card.replaceChildren();
+    var top = el("div", "row-top");
+    add(top, el("h3", null, L.supportTopic[m.topic] || m.topic),
+      badge(m.status === "answered" ? "Yanıtlandı" : "Yeni", m.status === "answered" ? "" : "green"));
+    var facts = el("div", "support-facts");
+    [["Yanıt adresi", m.replyEmail || "Verilmedi"], ["Uygulama", m.appVersion], ["iOS", m.osVersion], ["Gönderildi", when(m.createdAt)]]
+      .forEach(function (f) { var box = el("div", "support-fact"); add(box, el("span", "muted small", f[0]), el("strong", null, f[1])); facts.append(box); });
+    var body = el("div", "support-message", m.message);
+    var flags = piiFlags(m.message);
+    var actions = el("div", "actions");
+    if (m.replyEmail) actions.append(supportReplyLink(m));
+    if (m.status !== "answered") {
+      actions.append(button("Yanıtlandı olarak işaretle", "ghost", async function () {
+        var r = await act({ action: "supportMarkAnswered", id: m.id }, "Yanıtlandı olarak işaretlendi.");
+        if (r) viewSupport();
+      }, "check"));
+    }
+    add(card, top, facts, body,
+      flags.length ? banner("warn", "Mesajda kişisel veri olabilir: " + flags.join(", ") + ". Yanıtta tekrarlama.") : null,
+      el("p", "muted small", "Mesajda kullanıcının kontrol ettiği numara veya link yoktur; uygulama bunları eklemez." +
+        (m.answeredAt ? " Yanıtlandı: " + when(m.answeredAt) + "." : "")),
+      actions);
   }
 
   // ---------- Güncelleme (1.0.2, panolar 16–18) ----------
