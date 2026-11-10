@@ -54,6 +54,7 @@
           <li><strong>Kullanım hakkı bilgileri:</strong> aylık limit, kullanılan ve kalan araştırma hakkı.</li>
           <li><strong>Arama geçmişi (araştırma girdileri):</strong> araştırmasını başlattığın telefon numarası, bağlantı veya alan adı. Bunlar sorguladığın numara ve adreslerdir; kendi telefon numaran değildir.</li>
           <li><strong>Topluluk bildirimleri:</strong> "Bilgi ekle" ile gönderdiğin tür (numara, link, SMS içeriği, IBAN veya e-posta), değer, kategori, en fazla 500 karakterlik açıklama ve olay tarihi. Görsel veya dosya eki alınmaz.</li>
+          <li><strong>Destek mesajları:</strong> "Bize yaz" ile gönderdiğin konu, mesaj ve isteğe bağlı olarak bıraktığın e-posta adresi ile uygulama ve iOS sürümü. Kontrol ettiğin numara, bağlantı veya IBAN mesaja eklenmez. E-posta yalnız sana yanıt vermek için kullanılır.</li>
           <li><strong>Teknik bilgiler:</strong> IP adresi ve istek bilgileri gibi altyapı kayıtları.</li>
           <li><strong>Bildirim token'ı:</strong> bildirimlere izin verirsen Apple'ın cihazına verdiği bildirim adresi, test veya canlı ortam bilgisi ve son görülme zamanı. Hesabına bağlanmaz.</li>
           <li><strong>Cihazda kalan bilgiler:</strong> maskelenmiş kontrol geçmişi ve tercihler. IBAN, e-posta ve mesaj metinleri cihazında analiz edilir; metnin kendisi sunucuya gönderilmez. Mesajda, QR kodda veya e-postada bağlantı varsa yalnız bu bağlantılar (adresin &quot;?&quot; ile başlayan kısmı olmadan, en fazla 3 adet) ve e-postada gönderen alan adı, T.C. Siber Güvenlik Başkanlığı'nın resmî tehdit kayıtlarıyla karşılaştırılmak üzere sunucuya gönderilir. Bu kontrol araştırma hakkı kullanmaz ve Brave Search API'ye gönderilmez.</li>
@@ -187,6 +188,7 @@
           <li>Araştırma önbelleği yukarıdaki sürelerde silinir.</li>
           <li>Bildirim token'ı 90 gün görülmezse ya da Apple geçersiz sayarsa silinir.</li>
           <li>Reddedilen topluluk bildirimleri ret tarihinden 90 gün sonra silinir.</li>
+          <li>Destek mesajları 12 ay sonra silinir; hesabını sildiğinde de silinir.</li>
           <li>Yönetici işlem kayıtları (bildirim inceleme, uyarı yayınlama ve yönetici girişleri) 2 yıl tutulur, sonra silinir.</li>
           <li>Cihazındaki geçmişi uygulama içinden silebilirsin; uygulamayı kaldırınca cihazdaki veriler de silinir.</li>
           <li>Hesabını sildiğinde; hesabın, abonelik ve araştırma hakkı kayıtların, Ek Koşullar kabul kaydın, topluluk bildirimlerin ve RevenueCat'teki müşteri kaydın silinir. Abonelik olay defterindeki kayıtlar denetim için seninle bağı kaldırılarak tutulur.</li>
