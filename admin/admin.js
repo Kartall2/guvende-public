@@ -972,7 +972,8 @@
       seg.append(b);
     });
     var topics = el("div", "templates");
-    [["", "Bütün konular"]].concat(Object.keys(L.supportTopic).map(function (k) { return [k, L.supportTopic[k]]; })).forEach(function (t) {
+    // 1.0.3: the app offers three topics; "billing" keeps its label for any old message but has no filter.
+    [["", "Bütün konular"]].concat(["bug", "confused", "idea"].map(function (k) { return [k, L.supportTopic[k]]; })).forEach(function (t) {
       var chip = el("button", "chip" + (t[0] === state.supportTopic ? " active" : ""), t[1]); chip.type = "button";
       chip.setAttribute("aria-pressed", t[0] === state.supportTopic ? "true" : "false");
       chip.onclick = function () { state.supportTopic = t[0]; state.supportSelected = null; viewSupport(); };
