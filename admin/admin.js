@@ -27,7 +27,8 @@
       registry_disable: "Resmî numara devre dışı bırakıldı",
       domain_registry_create: "Resmî alan adı eklendi", domain_registry_reverify: "Resmî alan adı yeniden doğrulandı",
       domain_registry_disable: "Resmî alan adı devre dışı bırakıldı",
-      version_policy_update: "Sürüm ayarı değiştirildi", support_answered: "Destek mesajı yanıtlandı" },
+      version_policy_update: "Sürüm ayarı değiştirildi", support_answered: "Destek mesajı yanıtlandı",
+      daily_warning_save: "Günün uyarısı kaydedildi", daily_warning_withdraw: "Günün uyarısı geri çekildi" },
     supportTopic: { bug: "Hata", confused: "Anlamadım", billing: "Abonelik / ödeme", idea: "Öneri" },
     registryStatus: { active: "Aktif", needs_review: "İncelenmeli", inactive: "Devre dışı", superseded: "Birleştirildi" },
     registryLine: { shared: "Ortak numara", operatorOnly: "Operatör hattı" }
@@ -595,8 +596,8 @@
     if (!state.editor) state.editor = blankEditor();
     var layout = el("div", "grid two"), editorCard = el("section", "card"), previewCard = el("section", "card");
     add(layout, editorCard, previewCard);
-    var lists = el("div");
-    add(c, layout, lists);
+    var lists = el("div"), daily = el("div");
+    add(c, daily, layout, lists);
     renderEditor(editorCard, previewCard);
     lists.append(skeleton());
     var drafts, alerts, audience;
@@ -610,6 +611,7 @@
     renderEditor(editorCard, previewCard);
     lists.replaceChildren();
     var active = alerts.filter(function (a) { return !a.withdrawnAt; }), withdrawn = alerts.filter(function (a) { return a.withdrawnAt; });
+    dailyWarningSection(daily, active);
     lists.append(el("h2", "section-title", "Taslaklar"));
     lists.append(listCard(drafts, "Taslak yok", "Şablonla başlayıp taslak olarak kaydedebilirsin.", draftRow));
     lists.append(el("h2", "section-title", "Yayındaki uyarılar"));
@@ -619,6 +621,128 @@
       lists.append(listCard(withdrawn, "", null, alertRow));
     }
   }
+  // ---------- Günün uyarısı (1.0.4) ----------
+  // One line at the top of the app's Alerts tab for a date range (at most 7
+  // days); at most one live record at a time (the database refuses overlaps).
+  var dwStatus = { live: ["Yayında", "green"], scheduled: ["Planlandı", "info"], ended: ["Bitti", ""], withdrawn: ["Geri çekildi", ""] };
+  var dwRefusals = { invalidText: "Metin 10–90 karakter, tek satır olmalı.", invalidRange: "Bitiş başlangıçtan sonra ve en fazla 7 gün içinde olmalı.",
+    endsInPast: "Bitiş zamanı geçmiş.", alertNotFound: "Bağlı uyarı yayında değil.", notFound: "Kayıt bulunamadı.",
+    notEditable: "Geri çekilmiş ya da bitmiş kayıt düzenlenemez.", alreadyWithdrawn: "Bu kayıt zaten geri çekilmiş.", invalid: "Bilgiler eksik ya da hatalı." };
+  function localInput(date) {
+    var d = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return d.toISOString().slice(0, 16);
+  }
+  function blankDailyWarning() {
+    var start = new Date(); start.setSeconds(0, 0);
+    var end = new Date(start); end.setDate(end.getDate() + 1); end.setHours(0, 0, 0, 0);
+    return { id: null, text: "", alertId: "", startsAt: localInput(start), endsAt: localInput(end) };
+  }
+  async function dailyWarningSection(box, activeAlerts) {
+    box.replaceChildren(el("h2", "section-title", "Günün uyarısı"), skeleton());
+    var warnings;
+    try { warnings = (await api({ action: "dailyWarningList" })).warnings || []; }
+    catch (e) { box.replaceChildren(el("h2", "section-title", "Günün uyarısı"), failed(e)); return; }
+    if (state.view !== "alerts") return;
+    if (!state.daily) state.daily = blankDailyWarning();
+    var d = state.daily;
+    var layout = el("div", "grid two"), form = el("section", "card"), side = el("section", "card");
+    box.replaceChildren(el("h2", "section-title", "Günün uyarısı"),
+      el("p", "small muted", "Uygulamada Uyarılar sekmesinin en üstünde, seçilen tarih aralığında görünür. Aynı anda tek kayıt yayında olabilir."),
+      layout);
+    add(layout, form, side);
+
+    var head = el("div", "card-head");
+    add(head, el("h2", null, d.id ? "Günün uyarısını düzenle" : "Yeni günün uyarısı"),
+      d.id ? button("Yeni kayıt", "subtle small", function () { state.daily = blankDailyWarning(); dailyWarningSection(box, activeAlerts); }) : null);
+    form.append(head);
+    var preview = el("div");
+    function field(label, key, attrs) {
+      var f = el("label", "field", label), i = el("input");
+      Object.assign(i, attrs || {}); i.value = d[key] || "";
+      i.oninput = function () { d[key] = i.value; render(); };
+      f.append(i); return f;
+    }
+    var textField = field("Metin (10–90 karakter, tek satır)", "text", { maxLength: 90, placeholder: "ör. Kargo SMS'indeki linke tıklama." });
+    var counter = el("p", "small muted");
+    form.append(textField, counter);
+    var row = el("div", "row-2");
+    add(row, field("Başlangıç", "startsAt", { type: "datetime-local" }), field("Bitiş", "endsAt", { type: "datetime-local" }));
+    form.append(row);
+    var link = el("label", "field", "Bağlı uyarı (isteğe bağlı: \"Ayrıntıyı gör\" bunu açar)"), sel = el("select");
+    sel.append(new Option("Bağlantı yok", ""));
+    activeAlerts.forEach(function (a) { sel.append(new Option(a.title, a.id)); });
+    sel.value = d.alertId || ""; sel.onchange = function () { d.alertId = sel.value; render(); };
+    link.append(sel); form.append(link);
+    var note = el("p", "form-note"), warn = el("div");
+    var actions = el("div", "editor-actions");
+    actions.append(button(d.id ? "Değişiklikleri kaydet" : "Kaydet", "primary", save, "check"));
+    add(form, warn, actions, note);
+
+    function render() {
+      var t = (d.text || "").trim();
+      counter.textContent = t.length + "/90";
+      var flags = piiFlags(t);
+      warn.replaceChildren();
+      if (flags.length) warn.append(banner("risk", "Kişisel veri olabilir: " + flags.join(", ") + ". Yayınlamadan önce kontrol et."));
+      // The app's card: title, date, the line, "Ayrıntıyı gör" when linked.
+      var card = el("div", "dw-card");
+      var top = el("div", "dw-top");
+      add(top, el("span", "dw-title", "📣 Günün uyarısı"),
+        el("span", "dw-date", d.startsAt ? new Date(d.startsAt).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }) : ""));
+      add(card, top, el("p", "dw-text", t || "Metin burada görünecek."), d.alertId ? el("span", "dw-link", "Ayrıntıyı gör ›") : null);
+      preview.replaceChildren(el("p", "small muted", "Uygulamada böyle görünür"), card);
+    }
+    async function save() {
+      var t = (d.text || "").trim();
+      if (t.length < 10 || t.length > 90) { note.textContent = dwRefusals.invalidText; return; }
+      if (!d.startsAt || !d.endsAt) { note.textContent = dwRefusals.invalidRange; return; }
+      var body = { action: "dailyWarningSave", id: d.id, text: t, alertId: d.alertId || null,
+        startsAt: new Date(d.startsAt).toISOString(), endsAt: new Date(d.endsAt).toISOString() };
+      note.textContent = "";
+      try {
+        var r = await api(body);
+        toast(d.id ? "Günün uyarısı güncellendi." : "Günün uyarısı kaydedildi.");
+        state.daily = blankDailyWarning();
+        dailyWarningSection(box, activeAlerts);
+        return r;
+      } catch (e) {
+        note.textContent = e.message === "overlap"
+          ? "Bu aralıkta başka bir kayıt var. Önce onu geri çek ya da aralığı değiştir."
+          : dwRefusals[e.message] || (e.message === "Yetki yok" ? "Bu hesabın yönetici yetkisi yok." : "Kaydedilemedi.");
+      }
+    }
+    render();
+
+    side.append(preview);
+    side.append(el("h3", "small muted", "Son kayıtlar"));
+    if (!warnings.length) side.append(empty("alerts", "Kayıt yok", "Kaydettiğin günün uyarıları burada listelenir."));
+    warnings.forEach(function (w) {
+      var item = el("div", "list-row");
+      var st = dwStatus[w.status] || [w.status, ""];
+      var meta = el("div", "small muted", when(w.startsAt) + " → " + when(w.endsAt) +
+        (w.alertTitle ? " · Bağlı: " + w.alertTitle + (w.alertWithdrawn ? " (geri çekildi)" : "") : ""));
+      var main = el("div"); add(main, badge(st[0], st[1]), el("p", null, w.text), meta);
+      var acts = el("div", "row-actions");
+      if (w.status === "live" || w.status === "scheduled") {
+        acts.append(button("Düzenle", "ghost small", function () {
+          state.daily = { id: w.id, text: w.text, alertId: w.alertWithdrawn ? "" : (w.alertID || ""),
+            startsAt: localInput(new Date(w.startsAt)), endsAt: localInput(new Date(w.endsAt)) };
+          dailyWarningSection(box, activeAlerts);
+        }));
+        acts.append(button("Geri çek", "danger small", async function () {
+          var ok = await dialog({ title: "Günün uyarısını geri çek", value: w.text,
+            text: "Uygulamada birkaç dakika içinde kaybolur (en fazla 1 dakikalık önbellek). Geri çekilen kayıt yeniden yayınlanamaz.",
+            ok: "Geri çek", danger: true });
+          if (!ok) return;
+          var r = await act({ action: "dailyWarningWithdraw", id: w.id }, "Günün uyarısı geri çekildi.");
+          if (r) { if (state.daily && state.daily.id === w.id) state.daily = blankDailyWarning(); dailyWarningSection(box, activeAlerts); }
+        }));
+      }
+      add(item, main, acts);
+      side.append(item);
+    });
+  }
+
   function listCard(items, emptyTitle, emptyText, row) {
     var card = el("div", "card");
     if (!items.length) card.append(empty("alerts", emptyTitle, emptyText));
