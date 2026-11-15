@@ -184,7 +184,24 @@
       body: JSON.stringify(body)
     });
   }
+  // 1.0.5: right after sign-in the first view used to send three calls at once
+  // (Özet + kullanıcılar + destek rozeti); one of them got a 403 on each fresh
+  // login (14 and 15 Nov) and was retried. Every 403 also raises admin-api's
+  // rejection counter. Now the first call of a session goes alone; the others
+  // wait for it, so they leave with the session it settled (aal2, refreshed if
+  // it had to be).
+  var firstCall = null;
+  function resetFirstCall() { firstCall = null; }
   async function api(body) {
+    if (!firstCall) {
+      var first = callAPI(body);
+      firstCall = first.then(function () {}, function () { firstCall = null; });
+      return first;
+    }
+    await firstCall;
+    return callAPI(body);
+  }
+  async function callAPI(body) {
     var session = await aal2Session();
     if (!session) throw new Error("Oturum yok");
     var response = await post(body, session);
@@ -276,9 +293,9 @@
   }
   async function routeNow() {
     var session = (await client.auth.getSession()).data.session;
-    if (!session) return show("login");
+    if (!session) { resetFirstCall(); return show("login"); }
     var aal = (await client.auth.mfa.getAuthenticatorAssuranceLevel()).data;
-    if (!aal || aal.currentLevel !== "aal2") return startMFA();
+    if (!aal || aal.currentLevel !== "aal2") { resetFirstCall(); return startMFA(); }
     if (tokenAAL(session.access_token) !== "aal2") await refreshOnce();
     if (!$("panel").hidden) return;
     show("panel");
@@ -307,7 +324,7 @@
     if (result.error) { $("mfa-note").textContent = "Kod doğrulanamadı."; return; }
     $("code").value = ""; route();
   };
-  $("sign-out").onclick = async function () { await client.auth.signOut(); show("login"); };
+  $("sign-out").onclick = async function () { await client.auth.signOut(); resetFirstCall(); show("login"); };
 
   // ---------- navigation ----------
   var VIEWS = [
