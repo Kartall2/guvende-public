@@ -54,7 +54,8 @@
     inbox: '<path d="M3 13h5l1 3h6l1-3h5"/><path d="M5 5h14l2 8v6H3v-6z"/>',
     support: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>',
     mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
-    external: '<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>'
+    external: '<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>',
+    bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>'
   };
   function icon(name) {
     var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -335,6 +336,7 @@
     { id: "domains", label: "Resmî alan adları", icon: "domains", sub: "Kurumların resmî siteleri; incelenmesi gerekenler üstte" },
     { id: "update", label: "Güncelleme", icon: "update", sub: "Uygulamanın güncelleme ekranı (1.0.2 ve sonrası)" },
     { id: "support", label: "Destek", icon: "support", sub: "Uygulamadaki \u201cBize yaz\u201d mesajları (1.0.3 ve sonrası)" },
+    { id: "notify", label: "Bana bildirim", icon: "bell", sub: "Yeni kullanıcı, deneme ve abonelik bildirimleri yalnız senin cihazlarına (1.0.5)" },
     { id: "audit", label: "Kayıtlar", icon: "audit", sub: "Yönetici işlemlerinin denetim kaydı" }
   ];
   var state = { view: "summary", reportTab: "pending", pending: 0, auditFilter: "", editor: null, pushReady: false,
@@ -361,7 +363,7 @@
     $("view-title").textContent = v.label; $("view-sub").textContent = v.sub;
     buildNav();
     ({ summary: viewSummary, reports: viewReports, alerts: viewAlerts, registry: viewRegistry, domains: viewDomains,
-      update: viewUpdate, support: viewSupport, audit: viewAudit })[v.id]();
+      update: viewUpdate, support: viewSupport, notify: viewNotify, audit: viewAudit })[v.id]();
     refreshSupportBadge();
   }
   function content() { var c = $("content"); c.replaceChildren(); return c; }
@@ -1085,6 +1087,89 @@
     }
     add(row, top, meta, check, actions);
     return row;
+  }
+
+  // ---------- Bana bildirim (1.0.5 A) ----------
+  // Owner-only notifications. A device appears as a candidate after the app is
+  // opened on it while signed in with the owner's app account (an operator
+  // allow-list, not the panel admin); it is added here (at most 3). A device
+  // signed into another account receives nothing.
+  function viewNotify() {
+    var c = content();
+    var devCard = el("section", "card"), setCard = el("section", "card"), campCard = el("section", "card");
+    devCard.setAttribute("aria-label", "Cihazlar"); setCard.setAttribute("aria-label", "Ayarlar"); campCard.setAttribute("aria-label", "Kampanya adları");
+    add(c, devCard, setCard, campCard);
+    devCard.append(skeleton("list"));
+    (async function () {
+      var data;
+      try { data = await api({ action: "adminPush" }); } catch (e) { devCard.replaceChildren(failed(e)); return; }
+      if (state.view !== "notify") return;
+      // Devices
+      devCard.replaceChildren(el("h3", null, "Cihazlarım"),
+        el("p", "muted", "Bildirim yalnız buradaki cihazlara gider ve yalnız cihazda sahip hesabıyla (uygulamadaki Apple hesabın) giriş yapılıyken. Şu an bildirim alacak cihaz: " + (data.targets || 0) + "."));
+      var active = (data.devices || []).filter(function (d) { return !d.disabledAt; });
+      if (!active.length) devCard.append(empty("bell", "Kayıtlı cihaz yok", "Uygulamayı sahip hesabıyla açtığın cihaz aşağıda aday olarak görünür."));
+      active.forEach(function (d) {
+        var row = el("div", "row");
+        add(row, el("strong", null, d.name), badge(d.environment === "production" ? "App Store" : "Test", d.environment === "production" ? "green" : "info"),
+          d.boundToOwner ? badge("Sahip hesabıyla açık", "green") : badge("Başka hesap / çıkış", "warn"),
+          el("span", "muted", "…" + d.tokenTail + " · " + when(d.createdAt)),
+          button("Kaldır", "ghost", async function () {
+            try { await api({ action: "adminPushDeviceRemove", id: d.id }); toast("Cihaz kaldırıldı."); viewNotify(); }
+            catch (e) { toast("Kaldırılamadı: " + e.message); }
+          }));
+        devCard.append(row);
+      });
+      (data.candidates || []).forEach(function (cand) {
+        var row = el("div", "row"), name = el("input"); name.type = "text"; name.maxLength = 40; name.placeholder = "Cihaz adı (ör. Samet iPhone)";
+        add(row, el("span", null, "Aday cihaz …" + cand.tokenTail), badge(cand.environment === "production" ? "App Store" : "Test", "info"),
+          el("span", "muted", "son görülme " + when(cand.seenAt)), name,
+          button("Ekle", "primary", async function () {
+            if (!name.value.trim()) { toast("Bir ad yaz."); return; }
+            try {
+              var r = await api({ action: "adminPushDeviceAdd", tokenTail: cand.tokenTail, name: name.value.trim() });
+              toast(r.ok ? "Cihaz eklendi." : "Eklenemedi.");
+            } catch (e) { toast(e.message === "limit" ? "En fazla 3 cihaz." : "Eklenemedi: " + e.message); }
+            viewNotify();
+          }));
+        devCard.append(row);
+      });
+      var test = button("Test bildirimi gönder", "ghost", async function () {
+        test.disabled = true;
+        try { var r = await api({ action: "adminPushTest" }); toast(r.sent ? "Gönderildi (" + r.sent + " cihaz)." : "Bildirim alacak cihaz yok."); }
+        catch (e) { toast("Gönderilemedi: " + e.message); }
+        test.disabled = false;
+      }, "bell");
+      test.disabled = !data.testReady;
+      devCard.append(test);
+      if (!data.testReady) devCard.append(el("p", "muted", "Gönderim henüz ayarlanmadı (sunucu anahtarı bekleniyor)."));
+      // Settings
+      var s = data.settings || {};
+      var instant = el("input"); instant.type = "checkbox"; instant.checked = s.instant !== false;
+      var hours = function (v) { var sel = el("select"); for (var h = 0; h < 24; h++) { var o = el("option", null, String(h).padStart(2, "0") + ":00"); o.value = h; if (h === v) o.selected = true; sel.append(o); } return sel; };
+      var qs = hours(s.quiet_start_hour ?? 23), qe = hours(s.quiet_end_hour ?? 8), dg = hours(s.digest_hour ?? 21);
+      var digestOn = el("input"); digestOn.type = "checkbox"; digestOn.checked = s.digest_hour !== null && s.digest_hour !== undefined;
+      setCard.replaceChildren(el("h3", null, "Ayarlar"),
+        add(el("label", "row"), instant, el("span", null, "Anlık bildirim")),
+        add(el("label", "row"), el("span", null, "Sessiz saatler"), qs, el("span", null, "–"), qe),
+        add(el("label", "row"), digestOn, el("span", null, "Gün sonu özeti"), dg),
+        el("p", "muted", "Sessiz saatlerde gelen olaylar beklenir, saat bitince tek bildirimde gelir."),
+        button("Kaydet", "primary", async function () {
+          try {
+            await api({ action: "adminPushSettings", instant: instant.checked, quietStart: Number(qs.value), quietEnd: Number(qe.value),
+              digestHour: digestOn.checked ? Number(dg.value) : null });
+            toast("Kaydedildi.");
+          } catch (e) { toast("Kaydedilemedi: " + e.message); }
+        }));
+      // Campaign names (Apple Ads sends ids only)
+      var cid = el("input"), cname = el("input"); cid.placeholder = "Kampanya kimliği"; cid.inputMode = "numeric"; cname.placeholder = "Ad (boş = sil)"; cname.maxLength = 60;
+      campCard.replaceChildren(el("h3", null, "Apple Ads kampanya adları"),
+        el("p", "muted", "Bildirimde \u201cApple Ads \u203a <ad>\u201d görünür; ad yoksa kampanya kimliği."),
+        add(el("div", "row"), cid, cname, button("Kaydet", "ghost", async function () {
+          try { await api({ action: "adsCampaignName", campaignId: cid.value.trim(), name: cname.value.trim() }); toast("Kaydedildi."); cid.value = ""; cname.value = ""; }
+          catch (e) { toast("Kaydedilemedi: " + e.message); }
+        })));
+    })();
   }
 
   // ---------- Destek (1.0.3 B2, tuval Panel-Destek) ----------
