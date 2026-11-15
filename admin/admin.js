@@ -55,7 +55,8 @@
     support: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>',
     mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
     external: '<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>',
-    bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>'
+    bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+    funnel: '<path d="M3 5h18l-7 8v6l-4 2v-8z"/>'
   };
   function icon(name) {
     var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -337,6 +338,7 @@
     { id: "update", label: "Güncelleme", icon: "update", sub: "Uygulamanın güncelleme ekranı (1.0.2 ve sonrası)" },
     { id: "support", label: "Destek", icon: "support", sub: "Uygulamadaki \u201cBize yaz\u201d mesajları (1.0.3 ve sonrası)" },
     { id: "notify", label: "Bana bildirim", icon: "bell", sub: "Yeni kullanıcı, deneme ve abonelik bildirimleri yalnız senin cihazlarına (1.0.5)" },
+    { id: "funnel", label: "Huni", icon: "funnel", sub: "Kurulumdan ilk araştırmaya adımlar; kişi değil kurulum sayısı (1.0.5)" },
     { id: "audit", label: "Kayıtlar", icon: "audit", sub: "Yönetici işlemlerinin denetim kaydı" }
   ];
   var state = { view: "summary", reportTab: "pending", pending: 0, auditFilter: "", editor: null, pushReady: false,
@@ -363,7 +365,7 @@
     $("view-title").textContent = v.label; $("view-sub").textContent = v.sub;
     buildNav();
     ({ summary: viewSummary, reports: viewReports, alerts: viewAlerts, registry: viewRegistry, domains: viewDomains,
-      update: viewUpdate, support: viewSupport, notify: viewNotify, audit: viewAudit })[v.id]();
+      update: viewUpdate, support: viewSupport, notify: viewNotify, funnel: viewFunnel, audit: viewAudit })[v.id]();
     refreshSupportBadge();
   }
   function content() { var c = $("content"); c.replaceChildren(); return c; }
@@ -1087,6 +1089,55 @@
     }
     add(row, top, meta, check, actions);
     return row;
+  }
+
+  // ---------- Huni (1.0.5 C) ----------
+  // Counts per step for the last 7 or 30 Istanbul days; installs, not people.
+  // No person, cohort or device: the server only keeps day totals.
+  var FUNNEL_STEPS = [
+    ["first_open", "İlk açılış", "Yeni kurulumun ilk açılışı (1.0.5 ve sonrası)"],
+    ["onboarding_done", "Karşılama bitti", "\u201cAtla\u201d dahil"],
+    ["paywall_seen", "Ödeme ekranı görüldü", "Hak bitince ya da teklifte"],
+    ["trial_started", "Deneme başladı", "RevenueCat, bu ortam"],
+    ["first_query", "İlk araştırma (hesapla)", "Hesabın ilk hak ayırması"]
+  ];
+  function viewFunnel() {
+    var c = content();
+    if (!state.funnelDays) state.funnelDays = 7;
+    var chips = el("div", "templates");
+    [7, 30].forEach(function (d) {
+      var chip = el("button", "chip" + (state.funnelDays === d ? " active" : ""), "Son " + d + " gün"); chip.type = "button";
+      chip.setAttribute("aria-pressed", state.funnelDays === d ? "true" : "false");
+      chip.onclick = function () { state.funnelDays = d; viewFunnel(); };
+      chips.append(chip);
+    });
+    var card = el("section", "card"), srcCard = el("section", "card");
+    card.setAttribute("aria-label", "Huni"); srcCard.setAttribute("aria-label", "Kurulum kaynağı");
+    add(c, chips, card, srcCard);
+    card.append(skeleton("list"));
+    (async function () {
+      var data;
+      try { data = await api({ action: "funnelSummary", days: state.funnelDays }); } catch (e) { card.replaceChildren(failed(e)); srcCard.remove(); return; }
+      if (state.view !== "funnel") return;
+      var f = data.funnel || {}, steps = f.steps || {}, first = Number(steps.first_open) || 0, prev = null;
+      card.replaceChildren(el("h3", null, "Huni · son " + f.days + " gün"),
+        el("p", "muted", "Sayılar kurulum (cihaz) sayısıdır, kişi değil; yeniden kurulum yeniden sayılır. Oran bir önceki adıma göre."));
+      FUNNEL_STEPS.forEach(function (s) {
+        var n = Number(steps[s[0]]) || 0;
+        var row = el("div", "list-row"), top = el("div", "row-top");
+        var ratio = prev === null ? "" : (prev > 0 ? "%" + Math.round(n / prev * 100) : "—");
+        add(top, el("strong", null, s[1]), el("span", "value", n + (ratio ? " · " + ratio : "")));
+        var track = el("div", "funnel-track"), fill = el("div", "funnel-fill");
+        fill.style.width = (first > 0 ? Math.min(100, Math.round(n / first * 100)) : 0) + "%";
+        track.append(fill);
+        add(row, top, track, el("span", "muted", s[2]));
+        card.append(row);
+        prev = n;
+      });
+      var src = f.sources || {};
+      srcCard.replaceChildren(el("h3", null, "Kurulum kaynağı · son " + f.days + " gün"),
+        el("p", "muted", "Apple Ads: " + (src.apple_ads || 0) + " · Organik: " + (src.organic || 0) + " · Bilinmiyor: " + (src.unknown || 0)));
+    })();
   }
 
   // ---------- Bana bildirim (1.0.5 A) ----------
