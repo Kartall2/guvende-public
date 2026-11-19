@@ -56,7 +56,8 @@
     mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
     external: '<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>',
     bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
-    funnel: '<path d="M3 5h18l-7 8v6l-4 2v-8z"/>'
+    funnel: '<path d="M3 5h18l-7 8v6l-4 2v-8z"/>',
+    flag: '<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>'
   };
   function icon(name) {
     var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -220,7 +221,8 @@
   }
   var refusals = { not_pending: "Bu bildirim artık beklemede değil.", not_approved: "Bildirim onaylı değil.",
     not_rejected: "Bildirim reddedilmiş değil.", not_found: "Kayıt bulunamadı.", invalid: "Bilgiler eksik ya da hatalı.",
-    push_limit: "Son 24 saatte 2 push gönderildi; şimdilik push gönderilemez. Uyarıyı pushsuz yayınlayabilirsin." };
+    push_limit: "Son 24 saatte 2 push gönderildi; şimdilik push gönderilemez. Uyarıyı pushsuz yayınlayabilirsin.",
+    alreadyClosed: "Bu itiraz zaten kapanmış.", notSuppressed: "Bu numaranın özeti gizli değil.", notFound: "Kayıt bulunamadı." };
   async function act(body, success) {
     try {
       var r = await api(body);
@@ -337,12 +339,14 @@
     { id: "domains", label: "Resmî alan adları", icon: "domains", sub: "Kurumların resmî siteleri; incelenmesi gerekenler üstte" },
     { id: "update", label: "Güncelleme", icon: "update", sub: "Uygulamanın güncelleme ekranı (1.0.2 ve sonrası)" },
     { id: "support", label: "Destek", icon: "support", sub: "Uygulamadaki \u201cBize yaz\u201d mesajları (1.0.3 ve sonrası)" },
+    { id: "disputes", label: "Özet itirazları", icon: "flag", sub: "Yapay zekâ özetine gelen itirazlar (1.1); hiçbir şey kendiliğinden kaldırılmaz" },
     { id: "notify", label: "Bana bildirim", icon: "bell", sub: "Yeni kullanıcı, deneme ve abonelik bildirimleri yalnız senin cihazlarına (1.0.5)" },
     { id: "funnel", label: "Huni", icon: "funnel", sub: "Kurulumdan ilk araştırmaya adımlar; kişi değil kurulum sayısı (1.0.5)" },
     { id: "audit", label: "Kayıtlar", icon: "audit", sub: "Yönetici işlemlerinin denetim kaydı" }
   ];
   var state = { view: "summary", reportTab: "pending", pending: 0, auditFilter: "", editor: null, pushReady: false,
-    supportNew: 0, supportStatus: "new", supportTopic: "", supportSelected: null };
+    supportNew: 0, supportStatus: "new", supportTopic: "", supportSelected: null,
+    disputesOpen: 0, disputeStatus: "open", disputeSelected: null };
   function buildNav() {
     [["nav", ""], ["tabbar", ""]].forEach(function (pair) {
       var host = $(pair[0]); host.replaceChildren();
@@ -351,6 +355,7 @@
         b.append(icon(v.icon), el("span", null, v.label));
         if (v.id === "reports" && state.pending > 0) b.append(el("span", "count", state.pending));
         if (v.id === "support" && state.supportNew > 0) b.append(el("span", "count", state.supportNew));
+        if (v.id === "disputes" && state.disputesOpen > 0) b.append(el("span", "count", state.disputesOpen));
         if (v.id === state.view) b.classList.add("active");
         b.onclick = function () { go(v.id); };
         host.append(b);
@@ -365,8 +370,9 @@
     $("view-title").textContent = v.label; $("view-sub").textContent = v.sub;
     buildNav();
     ({ summary: viewSummary, reports: viewReports, alerts: viewAlerts, registry: viewRegistry, domains: viewDomains,
-      update: viewUpdate, support: viewSupport, notify: viewNotify, funnel: viewFunnel, audit: viewAudit })[v.id]();
+      update: viewUpdate, support: viewSupport, disputes: viewDisputes, notify: viewNotify, funnel: viewFunnel, audit: viewAudit })[v.id]();
     refreshSupportBadge();
+    if (v.id !== "disputes") refreshDisputeBadge();
   }
   function content() { var c = $("content"); c.replaceChildren(); return c; }
 
@@ -1221,6 +1227,73 @@
           catch (e) { toast("Kaydedilemedi: " + e.message); }
         })));
     })();
+  }
+
+  // ---------- Özet itirazları (1.1 Görev 6) ----------
+  // The number is only the server's display mask; an app dispute has none (the
+  // cache keeps only the fingerprint), so its detail shows the summary items.
+  // Every view and every "Yenile" asks admin-api again; nothing is kept here.
+  var D = window.GVD_DISPUTES;
+  function disputeUI(extra) {
+    return Object.assign({ h: el, badge: badge, when: when, selected: state.disputeSelected }, extra || {});
+  }
+  async function refreshDisputeBadge() {
+    try {
+      var r = await api({ action: "summaryDisputeList", status: "open" });
+      var n = D.openCount(r.disputes);
+      if (n !== state.disputesOpen) { state.disputesOpen = n; buildNav(); }
+    } catch (e) { /* the badge simply stays as it was */ }
+  }
+  function viewDisputes() {
+    var c = content();
+    var seg = el("div", "segments");
+    [["open", "Açık"], ["", "Tümü"], ["accepted", "Kabul"], ["rejected", "Ret"]].forEach(function (t) {
+      var b = el("button", t[0] === state.disputeStatus ? "active" : "", t[1]); b.type = "button";
+      b.setAttribute("aria-pressed", t[0] === state.disputeStatus ? "true" : "false");
+      b.onclick = function () { state.disputeStatus = t[0]; state.disputeSelected = null; viewDisputes(); };
+      seg.append(b);
+    });
+    var layout = el("div", "grid two"), listCard = el("section", "card"), detailCard = el("section", "card");
+    listCard.setAttribute("aria-label", "İtirazlar"); detailCard.setAttribute("aria-label", "İtiraz ayrıntısı");
+    add(layout, listCard, detailCard);
+    add(c, seg, layout);
+    listCard.append(skeleton("list"));
+    detailCard.append(empty("flag", "Bir itiraz seç", "Ayrıntı, özetin maddeleri ve karar burada."));
+    (async function () {
+      var data, open;
+      try {
+        data = await api(state.disputeStatus ? { action: "summaryDisputeList", status: state.disputeStatus } : { action: "summaryDisputeList" });
+        open = state.disputeStatus === "open" ? data : await api({ action: "summaryDisputeList", status: "open" });
+      } catch (e) { listCard.replaceChildren(failed(e)); return; }
+      if (state.view !== "disputes") return;
+      state.disputesOpen = D.openCount(open.disputes); buildNav();
+      listCard.replaceChildren();
+      var rows = (data.disputes || []).map(D.listRow);
+      if (!rows.length) { listCard.append(empty("inbox", "İtiraz yok", "Bu filtrede itiraz bulunmuyor.")); return; }
+      var head = el("div", "dispute-head muted small");
+      add(head, el("span", null, "Numara · durum"), el("span", null, "Tarih · kaynak"));
+      listCard.append(head);
+      rows.forEach(function (row) {
+        var b = D.renderRow(row, disputeUI());
+        b.onclick = function () { state.disputeSelected = row.id; viewDisputeDetail(detailCard, row.id, listCard); };
+        listCard.append(b);
+      });
+      if (state.disputeSelected) viewDisputeDetail(detailCard, state.disputeSelected, listCard);
+    })();
+  }
+  async function viewDisputeDetail(card, id, listCard) {
+    Array.prototype.forEach.call(listCard.querySelectorAll(".dispute-row"), function (r) { r.classList.toggle("selected", r.dataset.id === id); });
+    card.replaceChildren(skeleton("list"));
+    var data;
+    try { data = await api({ action: "summaryDisputeDetail", id: id }); }
+    catch (e) { card.replaceChildren(failed(e)); return; }
+    var model = D.detailModel(data.dispute);
+    card.replaceChildren(D.renderDetail(model, disputeUI({
+      onAction: async function (kind) {
+        var r = await D.runAction(kind, model, { dialog: dialog, act: act });
+        if (r) viewDisputes();
+      }
+    })));
   }
 
   // ---------- Destek (1.0.3 B2, tuval Panel-Destek) ----------

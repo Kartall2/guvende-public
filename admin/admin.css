@@ -266,3 +266,17 @@ a.btn { text-decoration: none; }
 /* Huni (1.0.5 C) */
 .funnel-track { height: 8px; border-radius: 999px; background: var(--line-2); overflow: hidden; }
 .funnel-fill { height: 100%; border-radius: 999px; background: var(--brand-600); }
+/* Özet itirazları (1.1 Görev 6) */
+.dispute-head { display: flex; justify-content: space-between; padding: 0 10px 8px; border-bottom: 1px solid var(--line-2); }
+.dispute-row { width: 100%; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--line-2);
+  font: inherit; color: inherit; cursor: pointer; padding: 12px 10px; border-radius: 0; min-height: 44px; }
+.dispute-row:hover, .dispute-row.selected { background: var(--brand-50); box-shadow: inset 3px 0 0 var(--brand-500); }
+.dispute-number { font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+h3.dispute-number { font-size: 19px; }
+h3.dispute-number.app { font-size: 15px; color: var(--ink-2); letter-spacing: 0; }
+.dispute-reason { color: var(--ink-2); }
+.dispute-summary { display: grid; gap: 8px; margin: 4px 0 14px; }
+.dispute-summary h4 { font-size: 14px; }
+.dispute-item { background: #f8f9fb; border-radius: 12px; padding: 10px 12px; display: grid; gap: 4px; }
+.dispute-item p { color: #172033; }
+.dispute-topic { color: #A44A06; font-size: 13px; font-weight: 700; }

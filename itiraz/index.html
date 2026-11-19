@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="referrer" content="no-referrer">
+    <meta name="color-scheme" content="light">
+    <!-- No tracking, no third-party script, no web font, no cookie: only this page and the dispute function. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src https://*.supabase.co; base-uri 'none'; form-action 'none'">
+    <title>Bu bilgi yanlış mı? · Güvende</title>
+    <link rel="stylesheet" href="itiraz.css" type="text/css">
+  </head>
+  <body>
+    <main class="page">
+      <div class="brand-row"><span class="logo" aria-hidden="true">G</span><strong>Güvende</strong></div>
+
+      <section class="card" id="form-card" aria-labelledby="title">
+        <div class="head">
+          <span class="head-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg>
+          </span>
+          <div>
+            <h1 id="title">Bu bilgi yanlış mı?</h1>
+            <p class="sub">Yorum özeti</p>
+          </div>
+        </div>
+        <p class="lead">Bu numaranın sahibiysen ya da özetin yanlış olduğunu düşünüyorsan bize yaz. İnceleyip gerekirse özeti kaldırırız.</p>
+
+        <noscript><p class="error">Formu göndermek için JavaScript gerekiyor. Dilersen guvendeapp@gmail.com adresine yazabilirsin.</p></noscript>
+
+        <form id="form" novalidate>
+          <div class="field">
+            <label for="number">Telefon numarası</label>
+            <input id="number" name="number" type="tel" inputmode="tel" autocomplete="tel" required maxlength="40"
+              placeholder="0850 123 45 67" aria-describedby="number-error" aria-invalid="false">
+            <p class="error" id="number-error" role="alert" hidden></p>
+          </div>
+
+          <fieldset class="reasons">
+            <legend>İtiraz nedeni</legend>
+            <label class="reason"><input type="radio" name="reason" value="owner" checked><span class="dot" aria-hidden="true"></span><span>Bu numara bana ya da firmama ait</span></label>
+            <label class="reason"><input type="radio" name="reason" value="unrelated"><span class="dot" aria-hidden="true"></span><span>Yorumlar bu numarayla ilgili değil</span></label>
+            <label class="reason"><input type="radio" name="reason" value="wrong"><span class="dot" aria-hidden="true"></span><span>Özet yorumları yanlış aktarıyor</span></label>
+            <label class="reason"><input type="radio" name="reason" value="other"><span class="dot" aria-hidden="true"></span><span>Başka bir neden</span></label>
+          </fieldset>
+
+          <div class="field">
+            <label for="note">Açıklama (isteğe bağlı)</label>
+            <textarea id="note" name="note" rows="4" maxlength="1000" placeholder="Örn. Bu numara firmamızın müşteri hattıdır."
+              aria-describedby="note-count note-error"></textarea>
+            <p class="hint" id="note-count" aria-live="polite">0 / 1000</p>
+            <p class="error" id="note-error" role="alert" hidden></p>
+          </div>
+
+          <div class="field">
+            <label for="email">Sana dönüş için e-posta (isteğe bağlı)</label>
+            <input id="email" name="email" type="email" inputmode="email" autocomplete="email" maxlength="254" spellcheck="false"
+              autocapitalize="off" placeholder="ornek@firma.com" aria-describedby="email-error" aria-invalid="false">
+            <p class="error" id="email-error" role="alert" hidden></p>
+          </div>
+
+          <!-- Trap for bots: not shown, not read aloud, not in the tab order. -->
+          <div class="trap" aria-hidden="true">
+            <label for="website">Web sitesi</label>
+            <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+          </div>
+
+          <p class="error center" id="send-error" role="alert" hidden></p>
+          <button class="primary" id="send" type="submit">
+            <span class="label">İtirazı gönder</span>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </form>
+      </section>
+
+      <section class="card sent" id="sent-card" hidden aria-labelledby="sent-title" tabindex="-1">
+        <span class="sent-mark" aria-hidden="true"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4 10-10"/></svg></span></span>
+        <p class="eyebrow">ALINDI</p>
+        <h2 id="sent-title">İtirazın bize ulaştı</h2>
+        <p class="lead">Genellikle 24 saat içinde inceliyoruz. İnceleme bitene kadar özet görünmeye devam edebilir.</p>
+      </section>
+
+      <footer class="foot">
+        <p>Güvende kimseyi dolandırıcı olarak etiketlemez; internetteki yorumları aktarır ve hata yapabilir.</p>
+        <p>İletişim: <a href="mailto:guvendeapp@gmail.com">guvendeapp@gmail.com</a></p>
+      </footer>
+    </main>
+    <script src="config.js"></script>
+    <script src="itiraz-form.js"></script>
+    <script src="itiraz.js"></script>
+  </body>
+</html>
