@@ -42,13 +42,13 @@
   }
 
   var ACTIONS = {
-    accept: { label: "Kabul et ve özeti gizle", ok: "Kabul et ve gizle", danger: true,
+    accept: { label: "Kabul et ve özeti gizle", ok: "Kabul et ve gizle", warn: true,
       text: "İtiraz kapanır ve bu numaranın yapay zekâ özeti uygulamada artık gösterilmez (önbellekte olsa bile). Sonra “Gizlemeyi kaldır” ile geri açabilirsin.",
       body: function (id) { return { action: "summaryDisputeDecide", id: id, decision: "accept" }; }, done: "İtiraz kabul edildi; özet gizlendi." },
-    reject: { label: "Reddet", ok: "Reddet", danger: false,
+    reject: { label: "Reddet", ok: "Reddet", warn: false,
       text: "İtiraz kapanır; özet görünmeye devam eder.",
       body: function (id) { return { action: "summaryDisputeDecide", id: id, decision: "reject" }; }, done: "İtiraz reddedildi." },
-    lift: { label: "Gizlemeyi kaldır", ok: "Gizlemeyi kaldır", danger: false,
+    lift: { label: "Gizlemeyi kaldır", ok: "Gizlemeyi kaldır", warn: false,
       text: "Bu numaranın yapay zekâ özeti yeniden gösterilebilir.",
       body: function (id) { return { action: "summarySuppressionRemove", id: id }; }, done: "Gizleme kaldırıldı." }
   };
@@ -56,7 +56,7 @@
   function confirmOptions(kind, model) {
     var a = ACTIONS[kind];
     // The number line only when there is a mask (an app dispute has none).
-    return { title: a.label, text: a.text, value: model.hasNumber ? model.number : null, ok: a.ok, danger: a.danger };
+    return { title: a.label, text: a.text, value: model.hasNumber ? model.number : null, ok: a.ok, warn: a.warn };
   }
   // Ask first; only a confirmed dialog reaches the API. → the API answer, or null.
   async function runAction(kind, model, deps) {
@@ -100,7 +100,8 @@
     });
     var actions = h("div", "actions");
     model.actions.forEach(function (kind) {
-      var b = h("button", "btn " + (kind === "accept" ? "danger solid" : "ghost"), ACTIONS[kind].label); b.type = "button";
+      // No red (not in the palette): accept uses the panel's warning colour --warn.
+      var b = h("button", "btn " + (kind === "accept" ? "warn solid" : "ghost"), ACTIONS[kind].label); b.type = "button";
       b.dataset.action = kind; b.onclick = function () { ui.onAction(kind); };
       actions.append(b);
     });

@@ -67,7 +67,8 @@ test("actions: the in-page dialog first; nothing is sent when it is cancelled", 
   assert.equal(sent.length, 0);
   assert.equal(deps.last.title, "Kabul et ve özeti gizle");
   assert.equal(deps.last.value, "0850 ••• •• 23");
-  assert.equal(deps.last.danger, true);
+  assert.equal(deps.last.warn, true);
+  assert.ok(!("danger" in deps.last), "no red dialog button");
   assert.deepEqual(await D.runAction("accept", m, deps({ reason: null, note: "" })), { ok: true });
   assert.deepEqual(sent[0][0], { action: "summaryDisputeDecide", id: "d1", decision: "accept" });
   await D.runAction("reject", m, deps({}));
@@ -95,4 +96,33 @@ test("admin.js uses the panel's own dialog, never the browser's confirm/alert", 
 test("dialog: the mask line only when there is a mask", () => {
   assert.equal(D.confirmOptions("accept", D.detailModel(web)).value, "0850 ••• •• 23");
   assert.equal(D.confirmOptions("lift", D.detailModel(app)).value, null);
+});
+
+test("Görev 7: no red in the dispute tab — accept and the menu badge use the panel's --warn", () => {
+  const fs = require("node:fs"), path = require("node:path");
+  const css = fs.readFileSync(path.join(__dirname, "..", "admin", "admin.css"), "utf8");
+  const js = fs.readFileSync(path.join(__dirname, "..", "admin", "admin.js"), "utf8");
+  const box = D.renderDetail(D.detailModel(web), ui({ onAction() {} }));
+  assert.equal(find(box, (n) => n.dataset.action === "accept").className, "btn warn solid");
+  assert.ok(!JSON.stringify(texts(box)).includes("danger"));
+  assert.ok(!/danger/.test(fs.readFileSync(path.join(__dirname, "..", "admin", "disputes.js"), "utf8").replace(/\/\/.*$/gm, "")));
+  assert.match(js, /el\("span", "count warn", state\.disputesOpen\)/);
+  assert.match(js, /o\.warn \? "warn solid"/);
+  assert.match(css, /\.btn\.warn\.solid \{ background: var\(--warn\); color: #fff;/);
+  assert.match(css, /\.count\.warn \{ background: var\(--warn\); color: #fff; \}/);
+  assert.match(css, /--warn: #c2570c;/);
+  // white on --warn #C2570C ≥ 4.5:1 (and on the pressed #A44A06)
+  const lum = (h) => h.match(/../g).map((x) => parseInt(x, 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+    .reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0);
+  for (const bg of ["c2570c", "a44a06"]) assert.ok(1.05 / (lum(bg) + 0.05) >= 4.5, bg);
+});
+
+test("Görev 7: phones — the tab bar is one scrolling row; the chosen tab is scrolled into view", () => {
+  const fs = require("node:fs"), path = require("node:path");
+  const css = fs.readFileSync(path.join(__dirname, "..", "admin", "admin.css"), "utf8");
+  const js = fs.readFileSync(path.join(__dirname, "..", "admin", "admin.js"), "utf8");
+  assert.match(css, /\.tabbar \{ display: flex; gap: 2px; overflow-x: auto;/);
+  assert.match(css, /\.tabbar button \{ flex: 0 0 auto; min-width: 78px; min-height: 52px; white-space: nowrap;/);
+  assert.ok(!/grid-template-columns: repeat\(4, 1fr\); position: fixed/.test(css));
+  assert.match(js, /bar\.scrollLeft = Math\.max\(0, active\.offsetLeft/);
 });

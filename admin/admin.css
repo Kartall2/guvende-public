@@ -95,10 +95,15 @@ a { color: var(--brand-700); }
   .topbar { padding: 14px 16px; }
   .topbar h1 { font-size: 20px; }
   .content { padding: 4px 16px calc(96px + env(safe-area-inset-bottom)); }
-  .tabbar { display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; inset: auto 0 0 0; z-index: 10;
+  /* One scrolling row (Görev 7): 11 tabs in a 4-column grid made 3 rows (≈183 px) that covered the
+     last buttons of a page; one row stays under the content's 96 px bottom space. */
+  .tabbar { display: flex; gap: 2px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+    position: fixed; inset: auto 0 0 0; z-index: 10;
     background: rgba(255, 255, 255, .96); border-top: 1px solid var(--line); padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
     backdrop-filter: blur(10px); }
-  .tabbar button { flex-direction: column; gap: 3px; font-size: 11px; padding: 6px 2px; justify-content: center; position: relative; }
+  .tabbar::-webkit-scrollbar { display: none; }
+  .tabbar button { flex: 0 0 auto; min-width: 78px; min-height: 52px; white-space: nowrap; flex-direction: column; gap: 3px;
+    font-size: 11px; padding: 6px 8px; justify-content: center; position: relative; }
   .tabbar button.active { color: var(--brand-700); }
   .tabbar .count { position: absolute; top: 2px; left: calc(50% + 6px); }
 }
@@ -280,3 +285,8 @@ h3.dispute-number.app { font-size: 15px; color: var(--ink-2); letter-spacing: 0;
 .dispute-item { background: #f8f9fb; border-radius: 12px; padding: 10px 12px; display: grid; gap: 4px; }
 .dispute-item p { color: #172033; }
 .dispute-topic { color: #A44A06; font-size: 13px; font-weight: 700; }
+/* Görev 7: no red for the dispute tab — the panel's own warning colour (--warn #C2570C,
+   white text 4.50:1); pressed: Güvende orangeText #A44A06 (5.90:1). */
+.btn.warn.solid { background: var(--warn); color: #fff; border-color: var(--warn); }
+.btn.warn.solid:hover:not(:disabled) { background: #A44A06; border-color: #A44A06; color: #fff; }
+.count.warn { background: var(--warn); color: #fff; }

@@ -263,7 +263,8 @@
         confirmLabel.append(confirmBox, document.createTextNode(o.confirm)); body.append(confirmLabel);
       }
       $("dialog-ok").textContent = o.ok || "Onayla";
-      $("dialog-ok").className = "btn " + (o.danger ? "danger solid" : "primary");
+      // Görev 7: o.warn = the panel's warning colour (--warn) instead of red.
+      $("dialog-ok").className = "btn " + (o.warn ? "warn solid" : o.danger ? "danger solid" : "primary");
       $("dialog").hidden = false;
       var done = function (v) { $("dialog").hidden = true; $("dialog-ok").onclick = $("dialog-cancel").onclick = null; resolve(v); };
       $("dialog-cancel").onclick = function () { done(null); };
@@ -355,12 +356,17 @@
         b.append(icon(v.icon), el("span", null, v.label));
         if (v.id === "reports" && state.pending > 0) b.append(el("span", "count", state.pending));
         if (v.id === "support" && state.supportNew > 0) b.append(el("span", "count", state.supportNew));
-        if (v.id === "disputes" && state.disputesOpen > 0) b.append(el("span", "count", state.disputesOpen));
+        if (v.id === "disputes" && state.disputesOpen > 0) b.append(el("span", "count warn", state.disputesOpen));
         if (v.id === state.view) b.classList.add("active");
         b.onclick = function () { go(v.id); };
         host.append(b);
       });
     });
+    // Phones: the tab bar is one scrolling row; the chosen tab is moved into view.
+    var bar = $("tabbar"), active = bar.querySelector("button.active");
+    if (active && bar.scrollWidth > bar.clientWidth) {
+      bar.scrollLeft = Math.max(0, active.offsetLeft - (bar.clientWidth - active.offsetWidth) / 2);
+    }
   }
   $("refresh").append(icon("refresh"));
   $("refresh").onclick = function () { go(state.view); };
