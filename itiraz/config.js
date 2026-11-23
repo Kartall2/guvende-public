@@ -1,7 +1,6 @@
 // Web dispute form settings. No key: summary-dispute takes no account and no
 // API key on the web path (verify_jwt = false; the function checks everything).
-// Default: the SANDBOX function. At release this one line becomes the
-// production address (separate, approved step).
+// Production function (1.1.0 Aşama 3, Samet's "evet" 23 Kas 2026).
 window.GVD_DISPUTE_CONFIG = {
-  endpoint: "https://skuwmniihvjswrwjypto.supabase.co/functions/v1/summary-dispute"
+  endpoint: "https://lhhfmhhquzwoavrwmyok.supabase.co/functions/v1/summary-dispute"
 };

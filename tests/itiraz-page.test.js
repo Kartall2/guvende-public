@@ -44,8 +44,8 @@ test("privacy: no third-party script, font, analytics or cookie; only the disput
   assert.ok(!/document\.cookie|localStorage|sessionStorage/.test(fs.readFileSync(path.join(dir, "itiraz.js"), "utf8")));
   assert.ok(!/@import|url\(/.test(css), "no external css resources");
   assert.match(html, /script-src 'self'; style-src 'self'; img-src 'self'; connect-src https:\/\/\*\.supabase\.co/);
-  assert.match(config, /endpoint: "https:\/\/skuwmniihvjswrwjypto\.supabase\.co\/functions\/v1\/summary-dispute"/);
-  assert.ok(!/lhhfmhhquzwoavrwmyok/.test(config + html), "no production address yet");
+  assert.match(config, /endpoint: "https:\/\/lhhfmhhquzwoavrwmyok\.supabase\.co\/functions\/v1\/summary-dispute"/);
+  assert.ok(!/skuwmniihvjswrwjypto/.test(config + html), "no sandbox address");
   assert.ok(!/sb_publishable_|sb_secret_|eyJ/.test(config), "no key in the config");
 });
 
