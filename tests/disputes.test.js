@@ -126,3 +126,16 @@ test("Görev 7: phones — the tab bar is one scrolling row; the chosen tab is s
   assert.ok(!/grid-template-columns: repeat\(4, 1fr\); position: fixed/.test(css));
   assert.match(js, /bar\.scrollLeft = Math\.max\(0, active\.offsetLeft/);
 });
+
+test("1.1.1: no red anywhere in the panel — danger and risk use --warn #C2570C", () => {
+  const fs = require("node:fs"), path = require("node:path");
+  const css = fs.readFileSync(path.join(__dirname, "..", "admin", "admin.css"), "utf8");
+  const reds = /#(dc2626|b91c1c|ef4444|f87171|fca5a5|fecaca|fee2e2|fef2f2|991b1b|7f1d1d|e11d48|f43f5e|ff0000)\b/i;
+  for (const file of ["admin.css", "admin.js", "disputes.js", "templates.js", "index.html"]) {
+    const text = fs.readFileSync(path.join(__dirname, "..", "admin", file), "utf8");
+    assert.ok(!reds.test(text), `${file} has a red`);
+  }
+  assert.match(css, /--risk: #c2570c; --risk-bg: #fff4e8; --risk-line: #fed7aa;/);
+  assert.match(css, /\.banner\.risk \{ background: var\(--risk-bg\); color: var\(--risk\);/);
+  assert.match(css, /\.phone \.band\.high \{ background: var\(--risk\); \}/);
+});
