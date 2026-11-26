@@ -70,8 +70,9 @@
           <li>Topluluk bildirimlerini incelemek ve onaylananları anonim sayı olarak göstermek.</li>
           <li>İzin verdiysen önemli dolandırıcılık uyarılarını bildirim olarak göndermek.</li>
           <li>Hesap silme ve veri taleplerini yerine getirmek.</li>
+          <li>Meta'daki reklamlarımızın sonucunu ölçmek.</li>
         </ul>
-        <p>Verilerini reklam, takip veya profilleme için kullanmıyoruz; veri satmıyoruz.</p>
+        <p>Verilerini profilleme için kullanmıyoruz ve satmıyoruz. Reklam ölçümü için Meta SDK'sı kullanılır; ayrıntısı aşağıdaki "Meta (Facebook) SDK ve reklam ölçümü" bölümündedir.</p>
       </div>
 
       <div class="card">
@@ -119,7 +120,7 @@
       <div class="card">
         <h2>Aktarım ve yurt dışına aktarım</h2>
         <p>
-          Kişisel verilerin yalnız hizmeti sunmak için aşağıdaki hizmet
+          Kişisel verilerin yalnız hizmeti sunmak ve reklam ölçümü için aşağıdaki hizmet
           sağlayıcılara aktarılır. Bu aktarımlar KVKK'nın 8. ve 9. maddeleri
           kapsamında yapılır.
         </p>
@@ -164,6 +165,12 @@
           <li>Ülke: ABD</li>
           <li>Amaç: Güvende yöneticisine giden teknik güvenlik ve işletim e-postaları</li>
           <li>Giden veri: yalnız olay türü, zamanı ve sayılar; kullanıcı bilgisi gönderilmez</li>
+        </ul>
+        <h3>Meta Platforms</h3>
+        <ul>
+          <li>Ülke: ABD ve İrlanda</li>
+          <li>Amaç: Reklam ölçümü (uygulama açılışı)</li>
+          <li>Giden veri: Cihaz bilgileri, IP adresi, anonim kimlik; takip izni verildiyse reklam kimliği (IDFA)</li>
         </ul>
         <p>Kart numarası ve ödeme yöntemi Apple tarafından işlenir; Güvende bu bilgileri almaz.</p>
       </div>
@@ -238,8 +245,7 @@
       <div class="card">
         <h2>Takip, reklam ve güvenlik</h2>
         <p>
-          Güvende reklam SDK'sı, reklam kimliği (IDFA) veya üçüncü taraf takip
-          analitiği kullanmaz. Bağlantılar HTTPS/TLS ile korunur; oturum
+          Güvende yalnız Meta SDK'sının reklam ölçümü parçasını kullanır; reklam kimliği (IDFA) yalnız iOS'ta takip izni verirsen Meta'ya gönderilir (ayrıntı yukarıda). Başka reklam SDK'sı veya üçüncü taraf takip analitiği kullanılmaz. Bağlantılar HTTPS/TLS ile korunur; oturum
           bilgileri cihazın güvenli depolama alanında tutulur. Hiçbir sistem
           mutlak güvenlik garantisi veremez.
         </p>
